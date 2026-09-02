@@ -58,6 +58,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
   const [isReorganizeModalOpen, setIsReorganizeModalOpen] = useState(false);
   const [isSubjectManagerOpen, setIsSubjectManagerOpen] = useState(false);
+  const [importTargetEdital, setImportTargetEdital] = useState<Edital | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCronogramaManagerOpen, setIsCronogramaManagerOpen] = useState(false);
 
@@ -222,6 +223,47 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
       ...prev,
       pontos: prev.pontos.filter(p => p.id !== id)
     }));
+  }, []);
+
+  const handleMovePonto = useCallback((id: string, direction: 'up' | 'down') => {
+    setState(prev => {
+      const targetIdx = prev.pontos.findIndex(p => p.id === id);
+      if (targetIdx === -1) return prev;
+
+      const targetPonto = prev.pontos[targetIdx];
+      const matchCriteria = (p: PontoEstudo) => 
+        p.materia === targetPonto.materia && 
+        p.cronogramaId === targetPonto.cronogramaId;
+
+      const matchingIndices: number[] = [];
+      prev.pontos.forEach((p, idx) => {
+        if (matchCriteria(p)) {
+          matchingIndices.push(idx);
+        }
+      });
+
+      const positionInMatch = matchingIndices.indexOf(targetIdx);
+      if (positionInMatch === -1) return prev;
+
+      let swapWithIdx = -1;
+      if (direction === 'up' && positionInMatch > 0) {
+        swapWithIdx = matchingIndices[positionInMatch - 1];
+      } else if (direction === 'down' && positionInMatch < matchingIndices.length - 1) {
+        swapWithIdx = matchingIndices[positionInMatch + 1];
+      }
+
+      if (swapWithIdx === -1) return prev;
+
+      const nextPontos = [...prev.pontos];
+      const temp = nextPontos[targetIdx];
+      nextPontos[targetIdx] = nextPontos[swapWithIdx];
+      nextPontos[swapWithIdx] = temp;
+
+      return {
+        ...prev,
+        pontos: nextPontos
+      };
+    });
   }, []);
 
   const handleSavePonto = useCallback((data: {
@@ -681,7 +723,8 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     }));
   }, []);
 
-  const handleOpenImportForEdital = useCallback((_edital: Edital) => {
+  const handleOpenImportForEdital = useCallback((edital: Edital) => {
+    setImportTargetEdital(edital);
     setIsImportModalOpen(true);
   }, []);
 
@@ -692,13 +735,9 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
       let nextPontos: PontoEstudo[];
 
       if (Array.isArray(reorgData)) {
-        const reorgMap = new Map(reorgData.map(p => [p.id, p]));
-        nextPontos = prev.pontos.map(p => {
-          if (activeId === 'all' || p.cronogramaId === activeId) {
-            return reorgMap.get(p.id) || p;
-          }
-          return p;
-        });
+        // Remove old points of the active schedule, append the new ones in the exact sorted array sequence
+        const otherPoints = prev.pontos.filter(p => !(activeId === 'all' || p.cronogramaId === activeId));
+        nextPontos = [...otherPoints, ...reorgData];
       } else if (reorgData && typeof reorgData === 'object') {
         nextPontos = prev.pontos.map(p => {
           if ((activeId === 'all' || p.cronogramaId === activeId) && reorgData[p.id]) {
@@ -743,17 +782,41 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   }, []);
 
   // Import points to specific schedule
-  const handleImportPointsToSchedule = useCallback((targetCronogramaId: string, importedPoints: Partial<PontoEstudo>[]) => {
+  const handleImportPointsToSchedule = useCallback((
+    points: PontoEstudo[],
+    destination: {
+      type: 'new_cronograma' | 'append_current' | 'replace_current';
+      newCronogramaNome?: string;
+      newCronogramaEditalId?: string;
+      targetCronogramaId?: string;
+    }
+  ) => {
     setState(prev => {
-      const newPoints: PontoEstudo[] = importedPoints.map(item => ({
-        id: uid(),
-        cronogramaId: targetCronogramaId,
+      let targetCronId = destination.targetCronogramaId || prev.activeCronogramaId;
+      const nextCronogramas = [...prev.cronogramas];
+
+      if (destination.type === 'new_cronograma') {
+        const newId = destination.targetCronogramaId || `cronograma-${uid()}`;
+        targetCronId = newId;
+        const newCro: Cronograma = {
+          id: newId,
+          nome: destination.newCronogramaNome || 'Novo Cronograma',
+          editalId: destination.newCronogramaEditalId || undefined,
+          cor: '#3b82f6',
+          createdAt: Date.now()
+        };
+        nextCronogramas.push(newCro);
+      }
+
+      const newPoints: PontoEstudo[] = points.map((item, idx) => ({
+        id: item.id || (uid() + idx),
+        cronogramaId: targetCronId,
         data: item.data || '',
         materia: item.materia || 'Geral',
         titulo: item.titulo || 'Tópico de Estudo',
         tipoEstudo: item.tipoEstudo || 'doutrina',
-        artigosLei: item.artigosLei,
-        jurisprudenciaRef: item.jurisprudenciaRef,
+        artigosLei: item.artigosLei || '',
+        jurisprudenciaRef: item.jurisprudenciaRef || '',
         notas: item.notas || '',
         lido: item.lido || false,
         qFeitas: item.qFeitas || false,
@@ -761,14 +824,31 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         qAcertos: item.qAcertos || '',
         dif: item.dif || null,
         showNotes: Boolean(item.notas),
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+        createdAt: item.createdAt || Date.now(),
+        updatedAt: item.updatedAt || Date.now()
       }));
+
+      let nextPontos = [...prev.pontos];
+      if (destination.type === 'replace_current') {
+        // Remove existing points of this schedule
+        nextPontos = nextPontos.filter(p => p.cronogramaId !== targetCronId);
+      }
+      nextPontos.push(...newPoints);
+
+      // Collect new subject colors if any
+      const nextColors = { ...prev.materiasCores };
+      newPoints.forEach(p => {
+        if (!nextColors[p.materia]) {
+          nextColors[p.materia] = '#52525b';
+        }
+      });
 
       return {
         ...prev,
-        pontos: [...prev.pontos, ...newPoints],
-        activeCronogramaId: targetCronogramaId,
+        cronogramas: nextCronogramas,
+        pontos: nextPontos,
+        materiasCores: nextColors,
+        activeCronogramaId: targetCronId,
         ui: { ...prev.ui, activeTab: 'pontos' }
       };
     });
@@ -782,7 +862,10 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         activeTab={state.ui.activeTab}
         onTabChange={(tab) => setState(prev => ({ ...prev, ui: { ...prev.ui, activeTab: tab } }))}
         onExport={() => exportBackup(state)}
-        onOpenImport={() => setIsImportModalOpen(true)}
+        onOpenImport={() => {
+          setImportTargetEdital(null);
+          setIsImportModalOpen(true);
+        }}
         onOpenReorganize={() => setIsReorganizeModalOpen(true)}
         onOpenSubjectManager={() => setIsSubjectManagerOpen(true)}
         onOpenCronogramaManager={() => setIsCronogramaManagerOpen(true)}
@@ -900,6 +983,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
                     setInitialMateriaForNewPonto(mat);
                     setIsPontoModalOpen(true);
                   }}
+                  onMovePonto={handleMovePonto}
                 />
               )}
             </div>
@@ -1072,10 +1156,14 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
       <ImportBackupModal
         isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
+        onClose={() => {
+          setIsImportModalOpen(false);
+          setImportTargetEdital(null);
+        }}
         cronogramas={state.cronogramas}
         activeCronogramaId={state.activeCronogramaId}
         editais={state.editais}
+        targetEdital={importTargetEdital}
         onImportFullBackup={(newState) => setState(newState)}
         onImportPointsToSchedule={handleImportPointsToSchedule}
       />

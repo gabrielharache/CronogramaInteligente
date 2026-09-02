@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppState, Cronograma, Edital, PontoEstudo, TipoEstudo } from '../../types';
 import { validateAndParseBackup } from '../../utils/storage';
 import { parseMarkdownStudyPoints, ParsedStudyPoint, uid } from '../../utils/helpers';
@@ -21,6 +21,7 @@ interface ImportBackupModalProps {
   cronogramas: Cronograma[];
   activeCronogramaId: string;
   editais: Edital[];
+  targetEdital?: Edital | null;
   onImportFullBackup: (newState: AppState) => void;
   onImportPointsToSchedule: (
     points: PontoEstudo[], 
@@ -52,6 +53,7 @@ export const ImportBackupModal: React.FC<ImportBackupModalProps> = ({
   cronogramas,
   activeCronogramaId,
   editais,
+  targetEdital,
   onImportFullBackup,
   onImportPointsToSchedule
 }) => {
@@ -64,6 +66,30 @@ export const ImportBackupModal: React.FC<ImportBackupModalProps> = ({
   const [parsedPoints, setParsedPoints] = useState<ParsedStudyPoint[]>([]);
   const [error, setError] = useState('');
   const [copiedTemplate, setCopiedTemplate] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setContent('');
+      setFullBackupPreview(null);
+      setParsedPoints([]);
+      setError('');
+      
+      if (targetEdital) {
+        const linkedCronograma = cronogramas.find(c => c.editalId === targetEdital.id);
+        if (linkedCronograma) {
+          setImportMode('append_current');
+        } else {
+          setImportMode('new_cronograma');
+        }
+        setNewCronogramaNome(`${targetEdital.nome}${targetEdital.cargo ? ` (${targetEdital.cargo})` : ''}`);
+        setNewCronogramaEditalId(targetEdital.id);
+      } else {
+        setImportMode('new_cronograma');
+        setNewCronogramaNome('');
+        setNewCronogramaEditalId('');
+      }
+    }
+  }, [isOpen, targetEdital, cronogramas]);
 
   if (!isOpen) return null;
 

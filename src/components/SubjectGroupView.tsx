@@ -11,6 +11,7 @@ interface SubjectGroupViewProps {
   onEditPonto: (ponto: PontoEstudo) => void;
   onDuplicatePonto: (ponto: PontoEstudo) => void;
   onNovoPontoNaMateria: (materia: string) => void;
+  onMovePonto?: (id: string, direction: 'up' | 'down') => void;
 }
 
 export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
@@ -20,7 +21,8 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
   onDeletePonto,
   onEditPonto,
   onDuplicatePonto,
-  onNovoPontoNaMateria
+  onNovoPontoNaMateria,
+  onMovePonto
 }) => {
   // Group points by subject
   const grouped: Record<string, PontoEstudo[]> = {};
@@ -147,7 +149,7 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
             {/* Subject Points Cards */}
             {!isCollapsed && (
               <div className="p-3.5 sm:p-4 bg-zinc-50/50 space-y-2.5">
-                {items.map(ponto => (
+                {items.map((ponto, idx) => (
                   <StudyPointCard
                     key={ponto.id}
                     ponto={ponto}
@@ -156,6 +158,8 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
                     onDelete={() => onDeletePonto(ponto.id)}
                     onEdit={() => onEditPonto(ponto)}
                     onDuplicate={() => onDuplicatePonto(ponto)}
+                    onMoveUp={idx > 0 ? () => onMovePonto?.(ponto.id, 'up') : undefined}
+                    onMoveDown={idx < items.length - 1 ? () => onMovePonto?.(ponto.id, 'down') : undefined}
                   />
                 ))}
               </div>

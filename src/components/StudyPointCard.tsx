@@ -30,6 +30,8 @@ interface StudyPointCardProps {
   onDelete: () => void;
   onEdit: () => void;
   onDuplicate?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 export const StudyPointCard: React.FC<StudyPointCardProps> = ({
@@ -38,7 +40,9 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
   onUpdate,
   onDelete,
   onEdit,
-  onDuplicate
+  onDuplicate,
+  onMoveUp,
+  onMoveDown
 }) => {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [isEditingQuestions, setIsEditingQuestions] = useState(false);
@@ -318,6 +322,34 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
 
         {/* Right Quick Controls on Hover */}
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onMoveUp && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp();
+              }}
+              className="p-1 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded transition-colors"
+              title="Subir na ordem lógica (Pré-requisito)"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {onMoveDown && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown();
+              }}
+              className="p-1 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded transition-colors"
+              title="Descer na ordem lógica"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           {onDuplicate && (
             <button
               onClick={onDuplicate}
