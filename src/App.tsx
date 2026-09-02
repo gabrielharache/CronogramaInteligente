@@ -1088,9 +1088,9 @@ function MainAppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white font-sans">
-        <div className="w-10 h-10 border-3 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4" />
-        <p className="text-slate-400 text-sm font-medium animate-pulse">Carregando seu cronograma...</p>
+      <div className="min-h-screen bg-[#f7f7f5] flex flex-col items-center justify-center text-zinc-900 font-sans">
+        <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-900 rounded-full animate-spin mb-3" />
+        <p className="text-zinc-500 text-sm font-medium">Carregando seu cronograma...</p>
       </div>
     );
   }
