@@ -1,0 +1,6 @@
+{
+  "name": "Estante de Estudos - Cronograma e Controle",
+  "description": "Plataforma personalizada para organização de pontos de estudo, controle de leitura, percentual de acertos em questões, classificação por dificuldade e acompanhamento de editais.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
