@@ -17,7 +17,12 @@ import {
   LogOut,
   Cloud,
   CloudCheck,
-  User as UserIcon
+  User as UserIcon,
+  Save,
+  RotateCcw,
+  Clock,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { formatarDataBr, hojeStr } from '../utils/helpers';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,6 +41,11 @@ interface HeaderProps {
   onResetToInitial: () => void;
   onUpdatePonto?: (id: string, updated: Partial<PontoEstudo>) => void;
   isSaving?: boolean;
+  hasUnsavedChanges?: boolean;
+  lastSavedAt?: Date | null;
+  autoSaveCountdown?: number | null;
+  onManualSave?: () => void;
+  onDiscardChanges?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,10 +61,16 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenExamDateModal,
   onResetToInitial,
   onUpdatePonto,
-  isSaving = false
+  isSaving = false,
+  hasUnsavedChanges = false,
+  lastSavedAt = null,
+  autoSaveCountdown = null,
+  onManualSave,
+  onDiscardChanges
 }) => {
   const { user, signOut, isGuest, isConfigured } = useAuth();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
@@ -249,6 +265,86 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Tools & Actions */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+          {/* Cloud Sync & Auto/Manual Save Controls */}
+          <div className="flex items-center gap-1.5">
+            {isSaving ? (
+              <div 
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-blue-50 text-blue-700 border border-blue-200/80 shadow-2xs"
+                title="Salvando dados no Supabase..."
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                <span className="text-[11px] font-semibold">Salvando...</span>
+              </div>
+            ) : hasUnsavedChanges ? (
+              <div className="inline-flex items-center gap-1 bg-amber-50/90 border border-amber-200/80 p-0.5 rounded-lg shadow-2xs">
+                {/* Auto-save status / countdown indicator */}
+                <div 
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-amber-800"
+                  title={autoSaveCountdown !== null ? `Salvamento automático agendado para daqui a ${autoSaveCountdown}s` : 'Alterações pendentes de salvamento'}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-[11px] font-medium hidden sm:inline">Pendente</span>
+                  {autoSaveCountdown !== null && (
+                    <span className="text-[10px] font-mono font-bold bg-amber-200/70 text-amber-900 px-1 py-0.2 rounded">
+                      {autoSaveCountdown}s
+                    </span>
+                  )}
+                </div>
+
+                {/* Botão Salvar Agora (Manual) */}
+                {onManualSave && (
+                  <button
+                    type="button"
+                    onClick={onManualSave}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 px-2 py-0.5 rounded shadow-2xs transition-colors cursor-pointer"
+                    title="Salvar alterações agora no Supabase (Atalho: Ctrl + S)"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Salvar</span>
+                  </button>
+                )}
+
+                {/* Botão Reverter / Descartar Alterações */}
+                {onDiscardChanges && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirmDiscard) {
+                        onDiscardChanges();
+                        setConfirmDiscard(false);
+                      } else {
+                        setConfirmDiscard(true);
+                        setTimeout(() => setConfirmDiscard(false), 4000);
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                      confirmDiscard
+                        ? 'bg-rose-600 text-white font-bold animate-pulse shadow-sm'
+                        : 'text-zinc-600 hover:text-rose-700 hover:bg-rose-100/70'
+                    }`}
+                    title={confirmDiscard ? 'Clique novamente para confirmar e desfazer as alterações' : 'Reverter para o último estado salvo no Supabase'}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="text-[11px]">{confirmDiscard ? 'Confirmar?' : 'Reverter'}</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div 
+                className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50/80 border border-emerald-200/70 px-2 py-1 rounded-md shadow-3xs"
+                title={lastSavedAt ? `Sincronizado com Supabase. Último salvamento às ${lastSavedAt.toLocaleTimeString('pt-BR')}` : 'Sincronizado com o Supabase'}
+              >
+                <CloudCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-[11px] font-medium hidden sm:inline">
+                  {lastSavedAt ? `Salvo às ${lastSavedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Salvo'}
+                </span>
+                <span className="text-[11px] font-medium sm:hidden">Salvo</span>
+              </div>
+            )}
+          </div>
+
+          <div className="h-4 w-px bg-zinc-200 hidden sm:block" />
+
           {/* Cronogramas & Editais Manager Shortcut */}
           <button
             onClick={onOpenCronogramaManager}
@@ -348,19 +444,74 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                   </div>
 
-                  {/* Sync status */}
-                  <div className="py-2.5 px-2 text-xs flex items-center justify-between text-zinc-600">
-                    <span className="text-[11px] font-medium text-zinc-500">Status:</span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      {isConfigured && user ? (
-                        <>
-                          <Cloud className="w-3 h-3 text-emerald-600" />
-                          <span>{isSaving ? 'Salvando...' : 'Nuvem Supabase'}</span>
-                        </>
-                      ) : (
-                        <span>Modo Local / Convidado</span>
-                      )}
-                    </span>
+                  {/* Sync status & Auto-save details */}
+                  <div className="py-2.5 px-2 text-xs border-b border-zinc-100 space-y-2">
+                    <div className="flex items-center justify-between text-zinc-600">
+                      <span className="text-[11px] font-medium text-zinc-500">Sincronização:</span>
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                        isSaving
+                          ? 'text-blue-700 bg-blue-50'
+                          : hasUnsavedChanges
+                          ? 'text-amber-800 bg-amber-50'
+                          : 'text-emerald-700 bg-emerald-50'
+                      }`}>
+                        {isConfigured && user ? (
+                          <>
+                            <Cloud className="w-3 h-3" />
+                            <span>
+                              {isSaving ? 'Salvando...' : hasUnsavedChanges ? 'Alterações pendentes' : 'Nuvem Supabase'}
+                            </span>
+                          </>
+                        ) : (
+                          <span>Modo Local / Convidado</span>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                      <span>Auto-salvar:</span>
+                      <span className="font-medium text-zinc-700">A cada 30s</span>
+                    </div>
+
+                    {lastSavedAt && (
+                      <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                        <span>Último salvamento:</span>
+                        <span className="font-mono text-zinc-700">
+                          {lastSavedAt.toLocaleTimeString('pt-BR')}
+                        </span>
+                      </div>
+                    )}
+
+                    {hasUnsavedChanges && (
+                      <div className="pt-1 flex items-center gap-1.5">
+                        {onManualSave && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onManualSave();
+                              setIsUserMenuOpen(false);
+                            }}
+                            className="flex-1 inline-flex items-center justify-center gap-1 py-1 px-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors"
+                          >
+                            <Save className="w-3 h-3" />
+                            <span>Salvar agora</span>
+                          </button>
+                        )}
+                        {onDiscardChanges && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onDiscardChanges();
+                              setIsUserMenuOpen(false);
+                            }}
+                            className="inline-flex items-center justify-center gap-1 py-1 px-2 rounded text-zinc-600 hover:text-rose-600 hover:bg-rose-50 text-[11px] font-medium transition-colors"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Reverter</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Logout Action */}

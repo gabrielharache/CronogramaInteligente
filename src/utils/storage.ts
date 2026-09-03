@@ -169,7 +169,7 @@ export function loadLocalUserState(userId?: string): AppState {
 }
 
 // Carregamento assíncrono com sincronização do Supabase
-export async function fetchUserState(userId?: string): Promise<{ state: AppState; fromCloud: boolean }> {
+export async function fetchUserState(userId?: string): Promise<{ state: AppState; fromCloud: boolean; updatedAt?: string }> {
   const localState = loadLocalUserState(userId);
 
   if (!userId || !isSupabaseConfigured()) {
@@ -199,47 +199,58 @@ export async function fetchUserState(userId?: string): Promise<{ state: AppState
     const cloudState = validateState(data.state, true);
     // Atualiza cache local
     localStorage.setItem(getUserStorageKey(userId), JSON.stringify(cloudState));
-    return { state: cloudState, fromCloud: true };
+    return { state: cloudState, fromCloud: true, updatedAt: data.updated_at };
   } catch (err) {
     console.error('Error in fetchUserState:', err);
     return { state: localState, fromCloud: false };
   }
 }
 
-// Salvamento no localStorage e Supabase (com debounce/fire-and-forget seguro)
-export async function saveUserState(state: AppState, userId?: string): Promise<boolean> {
+// Salvamento exclusivo no localStorage (para rascunho local instantâneo)
+export function saveLocalUserState(state: AppState, userId?: string): void {
   const key = getUserStorageKey(userId);
   try {
     localStorage.setItem(key, JSON.stringify(state));
   } catch (err) {
     console.error('Error saving to localStorage:', err);
   }
+}
 
+// Salvamento na nuvem do Supabase
+export async function saveCloudUserState(state: AppState, userId?: string): Promise<{ success: boolean; updatedAt?: string; error?: string }> {
   if (!userId || !isSupabaseConfigured()) {
-    return true;
+    return { success: true, updatedAt: new Date().toISOString() };
   }
 
   try {
+    const updatedAt = new Date().toISOString();
     const { error } = await supabase
       .from('user_schedules')
       .upsert(
         {
           user_id: userId,
           state: state,
-          updated_at: new Date().toISOString()
+          updated_at: updatedAt
         },
         { onConflict: 'user_id' }
       );
 
     if (error) {
       console.error('Error saving state to Supabase:', error.message);
-      return false;
+      return { success: false, error: error.message };
     }
-    return true;
-  } catch (err) {
+    return { success: true, updatedAt };
+  } catch (err: any) {
     console.error('Unexpected error saving state to Supabase:', err);
-    return false;
+    return { success: false, error: err?.message || 'Erro inesperado ao salvar no Supabase' };
   }
+}
+
+// Salvamento completo no localStorage e Supabase
+export async function saveUserState(state: AppState, userId?: string): Promise<boolean> {
+  saveLocalUserState(state, userId);
+  const result = await saveCloudUserState(state, userId);
+  return result.success;
 }
 
 // Exportar e Importar Backup JSON

@@ -1,6 +1,15 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { AppState, PontoEstudo, Edital, EditalStatus, TabMode, ViewMode, TipoEstudo, Cronograma } from './types';
-import { loadLocalUserState, fetchUserState, saveUserState, exportBackup, getInitialState, getEmptyUserState } from './utils/storage';
+import { 
+  loadLocalUserState, 
+  fetchUserState, 
+  saveUserState, 
+  saveLocalUserState, 
+  saveCloudUserState, 
+  exportBackup, 
+  getInitialState, 
+  getEmptyUserState 
+} from './utils/storage';
 import { uid, hojeStr, addDays, parseEditalMarkdown, parseMarkdownStudyPoints, distributePlannedDates, SmartEditalHierarchy, calcularDificuldadeAutomatica } from './utils/helpers';
 import confetti from 'canvas-confetti';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -62,15 +71,37 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCronogramaManagerOpen, setIsCronogramaManagerOpen] = useState(false);
 
+  // State persistence: Auto-save at 30s, manual save, and revert capabilities
+  const [lastSavedState, setLastSavedState] = useState<AppState>(() => loadLocalUserState(userId));
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [autoSaveCountdown, setAutoSaveCountdown] = useState<number | null>(null);
 
-  // Sync state with cloud when user logs in
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const lastSavedStateRef = useRef(lastSavedState);
+  lastSavedStateRef.current = lastSavedState;
+  const isSavingRef = useRef(isSaving);
+  isSavingRef.current = isSaving;
+
+  // Determine if there are pending unsaved changes compared to the cloud version
+  const hasUnsavedChanges = useMemo(() => {
+    return JSON.stringify(state) !== JSON.stringify(lastSavedState);
+  }, [state, lastSavedState]);
+
+  // Sync state with cloud when user logs in or mounts
   useEffect(() => {
     let isMounted = true;
     if (userId) {
-      fetchUserState(userId).then(({ state: cloudState }) => {
+      fetchUserState(userId).then(({ state: cloudState, updatedAt }) => {
         if (isMounted && cloudState) {
           setState(cloudState);
+          setLastSavedState(cloudState);
+          if (updatedAt) {
+            setLastSavedAt(new Date(updatedAt));
+          } else {
+            setLastSavedAt(new Date());
+          }
         }
       }).catch(err => {
         console.error('Error fetching cloud state:', err);
@@ -81,19 +112,106 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     };
   }, [userId]);
 
-  // Sync state to localStorage & Supabase
+  // Always update local storage draft immediately so browser refresh/crash never loses data
   useEffect(() => {
-    setIsSaving(true);
-    saveUserState(state, userId);
-    const timer = setTimeout(() => setIsSaving(false), 300);
-    return () => clearTimeout(timer);
+    saveLocalUserState(state, userId);
   }, [state, userId]);
 
-  const handleResetToInitial = useCallback(() => {
+  // Core save routine to Supabase
+  const executeCloudSave = useCallback(async (stateToSave: AppState) => {
+    if (isSavingRef.current) return;
+    setIsSaving(true);
+    try {
+      const res = await saveCloudUserState(stateToSave, userId);
+      if (res.success) {
+        setLastSavedState(stateToSave);
+        setLastSavedAt(res.updatedAt ? new Date(res.updatedAt) : new Date());
+        setAutoSaveCountdown(null);
+      }
+    } catch (err) {
+      console.error('Error saving state to Supabase:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [userId]);
+
+  // Manual save trigger (Header button or Ctrl+S)
+  const handleManualSave = useCallback(() => {
+    if (!hasUnsavedChanges || isSavingRef.current) return;
+    executeCloudSave(stateRef.current);
+  }, [hasUnsavedChanges, executeCloudSave]);
+
+  // Revert/discard changes to last saved cloud state
+  const handleDiscardChanges = useCallback(() => {
+    if (!hasUnsavedChanges) return;
+    const restored = lastSavedStateRef.current;
+    setState(restored);
+    saveLocalUserState(restored, userId);
+    setAutoSaveCountdown(null);
+  }, [hasUnsavedChanges, userId]);
+
+  // 30-second Auto-save mechanism with visual countdown
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setAutoSaveCountdown(null);
+      return;
+    }
+
+    const AUTO_SAVE_SECONDS = 30;
+    setAutoSaveCountdown(AUTO_SAVE_SECONDS);
+
+    const countdownInterval = setInterval(() => {
+      setAutoSaveCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const autoSaveTimer = setTimeout(() => {
+      executeCloudSave(stateRef.current);
+    }, AUTO_SAVE_SECONDS * 1000);
+
+    return () => {
+      clearInterval(countdownInterval);
+      clearTimeout(autoSaveTimer);
+    };
+  }, [hasUnsavedChanges, state, executeCloudSave]);
+
+  // Shortcut: Ctrl+S / Cmd+S to save manually
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (hasUnsavedChanges && !isSavingRef.current) {
+          executeCloudSave(stateRef.current);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasUnsavedChanges, executeCloudSave]);
+
+  // Warn user when closing tab if there are unsaved cloud changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const handleResetToInitial = useCallback(async () => {
     const initial = userId ? getEmptyUserState() : getInitialState();
     setState(initial);
-    saveUserState(initial, userId);
-  }, [userId]);
+    saveLocalUserState(initial, userId);
+    await executeCloudSave(initial);
+  }, [userId, executeCloudSave]);
 
   // Filter points belonging to active schedule (or all if activeCronogramaId === 'all')
   const activeSchedulePoints = useMemo(() => {
@@ -923,6 +1041,11 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         onResetToInitial={handleResetToInitial}
         onUpdatePonto={handleUpdatePonto}
         isSaving={isSaving}
+        hasUnsavedChanges={hasUnsavedChanges}
+        lastSavedAt={lastSavedAt}
+        autoSaveCountdown={autoSaveCountdown}
+        onManualSave={handleManualSave}
+        onDiscardChanges={handleDiscardChanges}
       />
 
       {/* Main Content Area */}
