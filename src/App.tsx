@@ -120,6 +120,15 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     return counts;
   }, [activeSchedulePoints]);
 
+  // Global Subject counts (across all schedules)
+  const globalMateriasCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    state.pontos.forEach(p => {
+      counts[p.materia] = (counts[p.materia] || 0) + 1;
+    });
+    return counts;
+  }, [state.pontos]);
+
   // Study type counts
   const tipoEstudoCounts = useMemo(() => {
     let doutrina = 0;
@@ -781,6 +790,46 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     }));
   }, []);
 
+  const handleDeleteSubject = useCallback((materia: string) => {
+    setState(prev => {
+      const nextColors = { ...prev.materiasCores };
+      delete nextColors[materia];
+
+      return {
+        ...prev,
+        pontos: prev.pontos.filter(p => p.materia !== materia),
+        materiasCores: nextColors
+      };
+    });
+  }, []);
+
+  const handleRenameSubject = useCallback((antigoNome: string, novoNome: string) => {
+    setState(prev => {
+      const nextColors = { ...prev.materiasCores };
+      if (nextColors[antigoNome] !== undefined) {
+        nextColors[novoNome] = nextColors[antigoNome];
+        delete nextColors[antigoNome];
+      }
+
+      const nextPoints = prev.pontos.map(p => {
+        if (p.materia === antigoNome) {
+          return {
+            ...p,
+            materia: novoNome,
+            updatedAt: Date.now()
+          };
+        }
+        return p;
+      });
+
+      return {
+        ...prev,
+        pontos: nextPoints,
+        materiasCores: nextColors
+      };
+    });
+  }, []);
+
   // Import points to specific schedule
   const handleImportPointsToSchedule = useCallback((
     points: PontoEstudo[],
@@ -1150,8 +1199,11 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         onClose={() => setIsSubjectManagerOpen(false)}
         materias={materias}
         materiasCores={state.materiasCores}
+        materiasCounts={globalMateriasCounts}
         onUpdateCor={handleUpdateSubjectColor}
         onAddMateria={handleAddSubject}
+        onDeleteMateria={handleDeleteSubject}
+        onRenameMateria={handleRenameSubject}
       />
 
       <ImportBackupModal
