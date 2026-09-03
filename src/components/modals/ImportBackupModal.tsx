@@ -113,15 +113,61 @@ export const ImportBackupModal: React.FC<ImportBackupModalProps> = ({
     setFullBackupPreview(null);
     setParsedPoints([]);
 
-    if (!text.trim()) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
 
-    // Check if it's a JSON backup
-    if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
-      const backup = validateAndParseBackup(text);
-      if (backup) {
-        setFullBackupPreview(backup);
-        setImportMode('full_backup');
-        return;
+    // Check if it's a JSON (starts with { or [)
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsedJson = JSON.parse(trimmed);
+        
+        // 1. Check if it's a full AppState backup containing pontos array
+        if (parsedJson && Array.isArray(parsedJson.pontos)) {
+          const backup = validateAndParseBackup(trimmed);
+          if (backup) {
+            setFullBackupPreview(backup);
+            
+            // Also extract individual points so they can be imported as "New" or "Append"!
+            const extracted: ParsedStudyPoint[] = backup.pontos.map(p => ({
+              materia: p.materia || 'Geral',
+              titulo: p.titulo || 'Sem título',
+              tipoEstudo: p.tipoEstudo || 'doutrina',
+              artigosLei: p.artigosLei || '',
+              jurisprudenciaRef: p.jurisprudenciaRef || '',
+              notas: p.notas || '',
+              data: p.data || ''
+            }));
+            
+            setParsedPoints(extracted);
+            setImportMode('full_backup');
+            return;
+          }
+        }
+        
+        // 2. Check if it's a raw JSON array of points/topics
+        const rawPointsArray = Array.isArray(parsedJson) 
+          ? parsedJson 
+          : (Array.isArray(parsedJson.points) 
+              ? parsedJson.points 
+              : (Array.isArray(parsedJson.pontos) ? parsedJson.pontos : null));
+              
+        if (rawPointsArray && rawPointsArray.length > 0) {
+          const extracted: ParsedStudyPoint[] = rawPointsArray.map((item: any) => ({
+            materia: item.materia || item.subject || 'Geral',
+            titulo: item.titulo || item.title || item.topic || 'Sem título',
+            tipoEstudo: item.tipoEstudo || item.type || 'doutrina',
+            artigosLei: item.artigosLei || item.law || '',
+            jurisprudenciaRef: item.jurisprudenciaRef || item.juris || '',
+            notas: item.notas || item.notes || '',
+            data: item.data || item.date || ''
+          }));
+          
+          setParsedPoints(extracted);
+          setImportMode('new_cronograma');
+          return;
+        }
+      } catch (e) {
+        console.warn("Falha no parse do JSON, tentando processar como Markdown...", e);
       }
     }
 
