@@ -184,14 +184,13 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Left: Home / Schedule Breadcrumb & Main Tabs */}
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-base select-none">📚</span>
             <div className="relative">
               <button
                 onClick={onOpenCronogramaManager}
                 className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-zinc-900 hover:text-zinc-700 transition-colors"
                 title="Trocar ou gerenciar cronogramas"
               >
-                <span className="truncate max-w-[200px] sm:max-w-[300px]">
+                <span className="truncate max-w-[200px] sm:max-w-[300px]" style={{ fontFamily: '"Palatino Linotype", "Book Antiqua", Palatino, serif' }}>
                   {state.activeCronogramaId === 'all'
                     ? 'Todos os Cronogramas'
                     : (activeCronogramaObj?.nome || 'Cronograma Principal')}
@@ -386,96 +385,164 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Hero Container */}
-      <div className="max-w-7xl 2xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
-        {/* Title & Countdown Row */}
-        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 mb-5">
-          <div>
-            <h1 className="font-sans font-bold text-2xl sm:text-3xl md:text-4xl text-zinc-900 tracking-tight">
-              {activeTab === 'pontos' && 'Cronograma de Estudos'}
-              {activeTab === 'editais' && 'Editais & Concursos Cadastrados'}
-              {activeTab === 'desempenho' && 'Desempenho & Estatísticas'}
-            </h1>
-            <p className="text-xs sm:text-sm text-zinc-500 font-sans mt-1">
-              {formattedTodayDate}
-            </p>
-          </div>
+      <div className="max-w-7xl 2xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+        
+        {/* Unified Layout for Cronograma Tab (Pontos) */}
+        {activeTab === 'pontos' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+            {/* Left side: Meta Card + Date (occupying 2 columns) */}
+            <div className="lg:col-span-2">
+              {hojePonto ? (
+                <div className="h-full bg-white border border-zinc-200/95 rounded-xl p-4 sm:p-5 shadow-3xs relative overflow-hidden transition-all hover:border-zinc-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  {/* Elegant vertical color ribbon */}
+                  <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-[#831843]" />
+                  <div className="pl-3 sm:pl-4 flex-1 min-w-0">
+                    <div className="text-[10px] sm:text-xs font-bold text-[#831843] uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#831843] animate-pulse" />
+                        <span>Hoje — Meta Diária</span>
+                      </div>
+                      <span className="text-zinc-400 font-mono text-[9px] uppercase bg-zinc-50 border border-zinc-100 px-1.5 py-0.5 rounded">
+                        {formattedTodayDate}
+                      </span>
+                    </div>
 
-          {/* Interactive Exam Countdown Badge */}
-          <div 
-            onClick={onOpenExamDateModal}
-            className="text-left sm:text-right group cursor-pointer p-2 -m-2 rounded-lg hover:bg-zinc-200/50 transition-colors"
-            title="Clique para personalizar a data da prova ou trocar de edital"
-          >
-            <div className="flex items-center sm:justify-end gap-1.5">
-              <span className="font-sans font-bold text-2xl sm:text-3xl text-zinc-900 tracking-tight">
-                {examInfo.days < 0 
-                  ? `Prova realizada (${Math.abs(examInfo.days)}d atrás)` 
-                  : examInfo.days === 0 
-                    ? 'Prova HOJE!' 
-                    : `${examInfo.days} dias`}
-              </span>
-              <button 
-                type="button"
-                className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-zinc-800 transition-opacity"
-                title="Editar data da prova"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="text-xs text-zinc-500 font-sans flex items-center sm:justify-end gap-1">
-              <span>até a prova {examInfo.labelDate}</span>
-              <span className="text-[10px] text-zinc-400 font-medium underline decoration-dotted group-hover:text-zinc-700">
-                (personalizar)
-              </span>
-            </div>
-          </div>
-        </div>
+                    <h2 className="font-serif text-base sm:text-lg md:text-xl font-bold text-zinc-900 leading-snug tracking-tight mt-1.5">
+                      {hojePonto.titulo}
+                    </h2>
 
-        {/* Featured "Hoje" Banner (Only shown when activeTab === 'pontos') */}
-        {activeTab === 'pontos' && hojePonto && (
-          <div className="bg-white border border-zinc-200 border-l-4 border-l-[#831843] rounded-md p-4 sm:p-5 shadow-2xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-[#831843] uppercase tracking-wide mb-1">
-                  Hoje — Meta Diária
+                    <div className="flex items-center flex-wrap gap-2 mt-2">
+                      <span 
+                        className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded text-white shadow-3xs"
+                        style={{ backgroundColor: hojeCor }}
+                      >
+                        {hojePonto.materia}
+                      </span>
+
+                      {(hojePonto.artigosLei || hojePonto.notas) && (
+                        <span className="font-serif italic text-xs text-zinc-500 truncate max-w-md">
+                          {hojePonto.artigosLei || hojePonto.notas}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pl-3 sm:pl-0 shrink-0">
+                    <button
+                      onClick={handleToggleHojePoint}
+                      className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-bold text-xs transition-all shadow-3xs cursor-pointer ${
+                        hojePonto.lido 
+                          ? 'bg-emerald-700 hover:bg-emerald-800 text-white' 
+                          : 'bg-zinc-900 hover:bg-zinc-850 text-white'
+                      }`}
+                    >
+                      {hojePonto.lido && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      <span>{hojePonto.lido ? 'Estudado ✓' : 'Marcar como estudado'}</span>
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <div className="h-full bg-white border border-zinc-200/95 rounded-xl p-4 sm:p-5 shadow-3xs relative overflow-hidden transition-all hover:border-zinc-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-zinc-400" />
+                  <div className="pl-3 sm:pl-4 flex-1 min-w-0">
+                    <div className="text-[10px] sm:text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                        <span>Metas de Hoje Concluídas</span>
+                      </div>
+                      <span className="text-zinc-400 font-mono text-[9px] uppercase bg-zinc-50 border border-zinc-100 px-1.5 py-0.5 rounded">
+                        {formattedTodayDate}
+                      </span>
+                    </div>
 
-                <h2 className="font-serif text-lg sm:text-2xl font-bold text-zinc-900 leading-snug tracking-tight">
-                  {hojePonto.titulo}
-                </h2>
+                    <h2 className="font-serif text-sm sm:text-base font-medium text-zinc-500 leading-snug tracking-tight mt-2 italic">
+                      Excelente trabalho! Você concluiu todos os tópicos agendados para hoje.
+                    </h2>
+                  </div>
+                </div>
+              )}
+            </div>
 
-                <div className="flex items-center flex-wrap gap-2 mt-2">
-                  <span 
-                    className="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded text-white shadow-2xs"
-                    style={{ backgroundColor: hojeCor }}
-                  >
-                    {hojePonto.materia}
-                  </span>
-
-                  {(hojePonto.artigosLei || hojePonto.notas) && (
-                    <span className="font-serif italic text-xs sm:text-sm text-zinc-500 truncate max-w-md">
-                      {hojePonto.artigosLei || hojePonto.notas}
-                    </span>
-                  )}
+            {/* Right side: Countdown Card (occupying 1 column) */}
+            <div 
+              onClick={onOpenExamDateModal}
+              className="group cursor-pointer bg-white border border-zinc-200/95 rounded-xl p-4 shadow-3xs hover:shadow-2xs hover:border-zinc-300 transition-all select-none flex items-center justify-between gap-4 relative overflow-hidden"
+              title="Clique para personalizar a data da prova ou trocar de edital"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-100 shrink-0 group-hover:bg-rose-100/60 transition-colors">
+                  <Calendar className="w-4.5 h-4.5 text-[#831843]" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-zinc-400 uppercase tracking-wider font-bold text-[9px] font-mono leading-none mb-0.5">
+                    Tempo Restante
+                  </div>
+                  <div className="text-[11px] text-zinc-500 font-sans truncate">
+                    para {examInfo.source}
+                  </div>
                 </div>
               </div>
 
-              <div className="shrink-0">
-                <button
-                  onClick={handleToggleHojePoint}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded font-semibold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer ${
-                    hojePonto.lido 
-                      ? 'bg-emerald-700 hover:bg-emerald-800 text-white' 
-                      : 'bg-[#18181B] hover:bg-black text-white'
-                  }`}
-                >
-                  {hojePonto.lido && <Check className="w-4 h-4 stroke-[3]" />}
-                  <span>{hojePonto.lido ? 'Estudado ✓' : 'Marcar como estudado'}</span>
-                </button>
+              <div className="flex flex-col items-end justify-center text-right shrink-0">
+                <div className="flex items-center justify-end gap-1">
+                  <Edit3 className="w-3 h-3 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  <span className="font-sans font-extrabold text-2xl sm:text-3xl text-zinc-900 tracking-tight leading-none">
+                    {examInfo.days < 0 
+                      ? `-${Math.abs(examInfo.days)}d` 
+                      : examInfo.days === 0 
+                        ? 'Hoje!' 
+                        : `${examInfo.days}d`}
+                  </span>
+                </div>
+                <div className="text-[9px] text-[#831843] font-bold bg-rose-50 border border-rose-100/60 rounded px-1.5 py-0.5 mt-1.5 whitespace-nowrap select-none">
+                  {examInfo.labelDate}
+                </div>
               </div>
             </div>
           </div>
         )}
+
+        {/* Standard Layout for other Tabs (Editais or Desempenho) */}
+        {activeTab !== 'pontos' && (
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-2">
+            <div className="space-y-1.5">
+              <h1 className="font-serif font-bold text-3xl sm:text-4xl md:text-[2.75rem] text-zinc-900 tracking-tight leading-[1.1]">
+                {activeTab === 'editais' && 'Editais & Concursos'}
+                {activeTab === 'desempenho' && 'Desempenho & Estatísticas'}
+              </h1>
+              <p className="text-xs uppercase tracking-widest text-zinc-500 font-semibold font-mono">
+                {formattedTodayDate}
+              </p>
+            </div>
+
+            {/* Interactive Exam Countdown Badge */}
+            <div 
+              onClick={onOpenExamDateModal}
+              className="group cursor-pointer bg-white border border-zinc-200/90 rounded-xl p-4 shadow-3xs hover:shadow-2xs hover:border-zinc-300 transition-all select-none flex items-center gap-4 min-w-[240px] md:self-center"
+              title="Clique para personalizar a data da prova ou trocar de edital"
+            >
+              <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center shrink-0 border border-rose-100 group-hover:bg-rose-100/60 transition-colors">
+                <Calendar className="w-5 h-5 text-[#831843]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="font-sans font-extrabold text-2xl sm:text-3xl text-zinc-900 tracking-tight leading-none">
+                    {examInfo.days < 0 
+                      ? `Prova há ${Math.abs(examInfo.days)}d` 
+                      : examInfo.days === 0 
+                        ? 'Hoje!' 
+                        : `${examInfo.days} dias`}
+                  </span>
+                  <Edit3 className="w-3.5 h-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1" />
+                </div>
+                <div className="text-[11px] text-zinc-500 font-sans mt-0.5 truncate">
+                  até {examInfo.source} • <span className="underline decoration-zinc-300 group-hover:text-zinc-800 font-medium">{examInfo.labelDate}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </header>
   );
