@@ -92,9 +92,9 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
       ? rawGradeSemanal 
       : (Array.isArray(rawGrade) ? rawGrade : []);
   }, [rawGradeSemanal, rawGrade]);
-  // Config for hours to display: default 06:00 to 23:00 (18 hours)
-  const [startHour] = useState(6);
-  const [endHour] = useState(23); // inclusive
+  // Config for hours to display: 24h, starting from 01:00 to 00:00 (represented by hour 0 at the end)
+  const [startHour] = useState(1);
+  const [endHour] = useState(24); // inclusive
 
   // Active day filter for mobile / focus
   const [selectedDayTab, setSelectedDayTab] = useState<number | 'todos'>('todos');
@@ -120,7 +120,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
   const hoursRange = useMemo(() => {
     const hours: number[] = [];
     for (let h = startHour; h <= endHour; h++) {
-      hours.push(h);
+      hours.push(h === 24 ? 0 : h);
     }
     return hours;
   }, [startHour, endHour]);
@@ -597,7 +597,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                                 : 'bg-emerald-100/50 border-x border-emerald-300/80 text-emerald-900'
                             }`}>
                               <span className="italic font-mono text-[10px] text-zinc-400 truncate">
-                                (continuação até {String(block.horaFim).padStart(2, '0')}:00)
+                                (continuação até {String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')}:00)
                               </span>
                             </div>
                           </td>
@@ -633,7 +633,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                                   {block.categoria === 'trabalho' && <Briefcase className="w-2.5 h-2.5" />}
                                   {block.categoria === 'estudo' && <BookOpen className="w-2.5 h-2.5" />}
                                   {block.categoria === 'afazeres' && <Smile className="w-2.5 h-2.5" />}
-                                  <span>{String(block.horaInicio).padStart(2, '0')}h - {String(block.horaFim).padStart(2, '0')}h ({duration}h)</span>
+                                  <span>{String(block.horaInicio).padStart(2, '0')}h - {String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')}h ({duration}h)</span>
                                 </span>
 
                                 {block.materia && (
@@ -801,7 +801,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                     onChange={(e) => setFormHoraInicio(parseInt(e.target.value, 10))}
                     className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-xs font-mono font-medium focus:ring-2 focus:ring-zinc-900 focus:outline-none"
                   >
-                    {Array.from({ length: 24 }).map((_, i) => (
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0].map((i) => (
                       <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
                     ))}
                   </select>
@@ -818,7 +818,8 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                   >
                     {Array.from({ length: 25 }).map((_, i) => {
                       if (i <= formHoraInicio) return null;
-                      return <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>;
+                      const displayHour = i === 24 ? 0 : i;
+                      return <option key={i} value={i}>{String(displayHour).padStart(2, '0')}:00</option>;
                     })}
                   </select>
                 </div>
