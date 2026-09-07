@@ -1178,7 +1178,11 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 max-w-7xl 2xl:max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <main className={`flex-1 w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 ${
+          state.ui.activeTab === 'organizacao_semanal'
+            ? 'max-w-none'
+            : 'max-w-7xl 2xl:max-w-[1680px]'
+        }`}>
           {/* TAB 1: Pontos de Estudo (Cronograma) */}
           {state.ui.activeTab === 'pontos' && (
             <div className={`flex flex-col ${state.ui.view === 'calendario' ? '' : 'lg:flex-row'} items-start gap-6`}>

@@ -732,7 +732,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
         /* Hour by Hour Schedule Grid */
         <div className="bg-white border border-zinc-200/90 rounded-xl overflow-hidden shadow-3xs">
           <div className="overflow-x-auto lg:overflow-x-visible">
-            <table className="w-full text-left border-collapse min-w-[760px] lg:min-w-0">
+            <table className="w-full text-left border-collapse min-w-[760px] lg:min-w-0 lg:table-fixed">
               {/* Table Header: Days of the week */}
               <thead>
                 <tr className="bg-zinc-50/90 border-b border-zinc-200 text-xs font-bold text-zinc-800">
@@ -746,7 +746,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                     const otherH = blocks.filter(b => b.categoria === 'afazeres').reduce((a, b) => a + (b.horaFim - b.horaInicio), 0);
 
                     return (
-                      <th key={d.id} className="p-2 sm:p-3 border-r border-zinc-200/80 last:border-r-0 min-w-[90px] sm:min-w-[105px] lg:min-w-[125px]">
+                      <th key={d.id} className="p-2 sm:p-3 border-r border-zinc-200/80 last:border-r-0 min-w-[90px] sm:min-w-[105px] lg:min-w-0">
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-xs sm:text-sm font-serif font-bold text-zinc-900 truncate">{d.nome}</span>
                           <button
