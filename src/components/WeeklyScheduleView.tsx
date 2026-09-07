@@ -98,6 +98,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
 
   // Active day filter for mobile / focus
   const [selectedDayTab, setSelectedDayTab] = useState<number | 'todos'>('todos');
+  const [layoutMode, setLayoutMode] = useState<'agenda' | 'grade'>('grade');
 
   // Modal / form state for adding/editing a block
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -327,6 +328,30 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
 
         {/* Actions */}
         <div className="flex items-center gap-2 flex-wrap no-print">
+          {/* Segmented Control Selector de Layout */}
+          <div className="bg-zinc-100 p-0.5 rounded-lg flex items-center border border-zinc-200 text-xs font-semibold mr-1 shadow-3xs">
+            <button
+              onClick={() => setLayoutMode('agenda')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                layoutMode === 'agenda'
+                  ? 'bg-white text-zinc-900 shadow-3xs font-bold font-sans'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Agenda (Sem rolagem)
+            </button>
+            <button
+              onClick={() => setLayoutMode('grade')}
+              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+                layoutMode === 'grade'
+                  ? 'bg-white text-zinc-900 shadow-3xs font-bold font-sans'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Grade Semanal
+            </button>
+          </div>
+
           <button
             onClick={handleClearAll}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
@@ -525,197 +550,381 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
         })}
       </div>
 
-      {/* Hour by Hour Schedule Grid */}
-      <div className="bg-white border border-zinc-200/90 rounded-xl overflow-hidden shadow-3xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[760px]">
-            {/* Table Header: Days of the week */}
-            <thead>
-              <tr className="bg-zinc-50/90 border-b border-zinc-200 text-xs font-bold text-zinc-800">
-                <th className="w-16 sm:w-20 p-3 text-center border-r border-zinc-200 font-mono text-zinc-500">
-                  Horário
-                </th>
-                {DIAS_SEMANA.filter(d => selectedDayTab === 'todos' || selectedDayTab === d.id).map(d => {
-                  const blocks = gradeSemanal.filter(b => b.diaSemana === d.id);
-                  const studyH = blocks.filter(b => b.categoria === 'estudo').reduce((a, b) => a + (b.horaFim - b.horaInicio), 0);
-                  const workH = blocks.filter(b => b.categoria === 'trabalho').reduce((a, b) => a + (b.horaFim - b.horaInicio), 0);
-                  const otherH = blocks.filter(b => b.categoria === 'afazeres').reduce((a, b) => a + (b.horaFim - b.horaInicio), 0);
+      {/* Dynamic View: Agenda (Cards) vs Grade (Table) */}
+      {layoutMode === 'agenda' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {DIAS_SEMANA.filter(d => selectedDayTab === 'todos' || selectedDayTab === d.id).map(d => {
+            const blocks = gradeSemanal
+              .filter(b => b.diaSemana === d.id)
+              .sort((a, b) => a.horaInicio - b.horaInicio);
 
-                  return (
-                    <th key={d.id} className="p-3 border-r border-zinc-200/80 last:border-r-0 min-w-[130px]">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-serif font-bold text-zinc-900">{d.nome}</span>
-                        <button
-                          onClick={() => handleOpenAddAt(d.id, 8)}
-                          className="p-1 rounded text-zinc-400 hover:text-zinc-900 hover:bg-zinc-200/60 transition-colors"
-                          title={`Adicionar atividade em ${d.nome}`}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1 font-mono text-[10px] text-zinc-500 font-normal">
-                        {workH > 0 && <span className="text-amber-700 font-semibold">{workH}h trab</span>}
-                        {studyH > 0 && <span className="text-blue-700 font-semibold">{studyH}h est</span>}
-                        {otherH > 0 && <span className="text-emerald-700">{otherH}h afaz</span>}
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
+            const totalStudyH = blocks.filter(b => b.categoria === 'estudo').reduce((acc, b) => acc + (b.horaFim - b.horaInicio), 0);
+            const totalWorkH = blocks.filter(b => b.categoria === 'trabalho').reduce((acc, b) => acc + (b.horaFim - b.horaInicio), 0);
+            const totalOtherH = blocks.filter(b => b.categoria === 'afazeres').reduce((acc, b) => acc + (b.horaFim - b.horaInicio), 0);
+            const totalDayHours = totalStudyH + totalWorkH + totalOtherH;
 
-            {/* Table Body: Hour Rows */}
-            <tbody className="divide-y divide-zinc-200/70 text-xs">
-              {hoursRange.map(hour => {
-                const hourFormatted = `${String(hour).padStart(2, '0')}:00`;
+            return (
+              <div 
+                key={d.id} 
+                className="bg-white border border-zinc-200/95 rounded-xl overflow-hidden shadow-3xs flex flex-col h-full print:border-zinc-300"
+              >
+                {/* Day Header inside Card */}
+                <div className="px-4 py-3 bg-zinc-50/80 border-b border-zinc-150/80 flex items-center justify-between print:bg-zinc-100">
+                  <div>
+                    <h3 className="font-serif font-bold text-zinc-900 text-sm sm:text-base">
+                      {d.nome}
+                    </h3>
+                    <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-mono text-zinc-500 font-semibold">
+                      {totalWorkH > 0 && <span className="text-amber-700">{totalWorkH}h trab</span>}
+                      {totalStudyH > 0 && <span className="text-blue-700">{totalStudyH}h est</span>}
+                      {totalOtherH > 0 && <span className="text-emerald-700">{totalOtherH}h afaz</span>}
+                      {totalDayHours === 0 && <span className="text-zinc-400">Sem atividades</span>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleOpenAddAt(d.id, 8)}
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-colors cursor-pointer no-print"
+                    title={`Adicionar atividade na ${d.nome}`}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
 
-                return (
-                  <tr key={hour} className="hover:bg-zinc-50/40 transition-colors">
-                    {/* Hour Column */}
-                    <td className="p-2.5 text-center font-mono text-zinc-400 font-semibold text-xs border-r border-zinc-200 bg-zinc-50/40 select-none">
-                      {hourFormatted}
-                    </td>
-
-                    {/* Day Cells */}
-                    {DIAS_SEMANA.filter(d => selectedDayTab === 'todos' || selectedDayTab === d.id).map(d => {
-                      const block = getBlockForSlot(d.id, hour);
-                      const isFirstHour = block && block.horaInicio === hour;
-
-                      // If there is a block spanning multiple hours and this is not the first hour, we still render a cell connected visually
-                      if (block && !isFirstHour) {
-                        return (
-                          <td 
-                            key={d.id} 
-                            onClick={() => handleOpenEdit(block)}
-                            className="p-1.5 border-r border-zinc-200/70 last:border-r-0 cursor-pointer bg-zinc-50/20"
-                          >
-                            <div className={`h-8 rounded px-2 flex items-center justify-between text-[11px] opacity-80 ${
-                              block.categoria === 'trabalho'
-                                ? 'bg-amber-100/50 border-x border-amber-300/80 text-amber-900'
-                                : block.categoria === 'estudo'
-                                ? 'bg-blue-100/50 border-x border-blue-300/80 text-blue-900'
-                                : 'bg-emerald-100/50 border-x border-emerald-300/80 text-emerald-900'
-                            }`}>
-                              <span className="italic font-mono text-[10px] text-zinc-400 truncate">
-                                (continuação até {String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')}:00)
-                              </span>
-                            </div>
-                          </td>
-                        );
-                      }
-
-                      if (block && isFirstHour) {
+                {/* Blocks List */}
+                <div className="p-4 flex-1 flex flex-col gap-3">
+                  {blocks.length > 0 ? (
+                    <div className="space-y-3 flex-1">
+                      {blocks.map(block => {
                         const duration = block.horaFim - block.horaInicio;
                         const subjectColor = block.materia ? (materiasCores[block.materia] || '#2563EB') : undefined;
                         const linkedPonto = block.pontoId ? pontos.find(p => p.id === block.pontoId) : null;
+                        const Icon = CATEGORIAS_CONFIG[block.categoria]?.icon || Clock;
 
                         return (
-                          <td 
-                            key={d.id} 
+                          <div 
+                            key={block.id}
                             onClick={() => handleOpenEdit(block)}
-                            className="p-1.5 border-r border-zinc-200/70 last:border-r-0 cursor-pointer transition-all hover:brightness-95"
-                          >
-                            <div className={`p-2 rounded-lg border shadow-3xs transition-all ${
+                            className={`p-3 rounded-xl border text-zinc-950 transition-all hover:shadow-2xs cursor-pointer relative group/item ${
                               block.categoria === 'trabalho'
-                                ? 'bg-amber-50/90 border-amber-300 text-amber-950 hover:border-amber-400'
+                                ? 'bg-amber-50/60 border-amber-200 hover:border-amber-300 hover:bg-amber-50/80'
                                 : block.categoria === 'estudo'
-                                ? 'bg-blue-50/90 border-blue-300 text-blue-950 hover:border-blue-400'
-                                : 'bg-emerald-50/90 border-emerald-300 text-emerald-950 hover:border-emerald-400'
-                            }`}>
-                              <div className="flex items-center justify-between gap-1 mb-0.5">
-                                <span className={`inline-flex items-center gap-1 text-[9px] font-bold font-mono uppercase px-1.5 py-0.2 rounded ${
-                                  block.categoria === 'trabalho'
-                                    ? 'bg-amber-200/70 text-amber-900'
-                                    : block.categoria === 'estudo'
-                                    ? 'bg-blue-200/70 text-blue-900'
-                                    : 'bg-emerald-200/70 text-emerald-900'
-                                }`}>
-                                  {block.categoria === 'trabalho' && <Briefcase className="w-2.5 h-2.5" />}
-                                  {block.categoria === 'estudo' && <BookOpen className="w-2.5 h-2.5" />}
-                                  {block.categoria === 'afazeres' && <Smile className="w-2.5 h-2.5" />}
-                                  <span>{String(block.horaInicio).padStart(2, '0')}h - {String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')}h ({duration}h)</span>
+                                ? 'bg-blue-50/60 border-blue-200 hover:border-blue-300 hover:bg-blue-50/80'
+                                : 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50/80'
+                            }`}
+                          >
+                            {/* Top row: Category Badge & Time Frame */}
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <span className={`inline-flex items-center gap-1.5 text-[9px] font-bold font-mono uppercase px-2 py-0.5 rounded ${
+                                block.categoria === 'trabalho'
+                                  ? 'bg-amber-200/50 text-amber-900'
+                                  : block.categoria === 'estudo'
+                                  ? 'bg-blue-200/50 text-blue-900'
+                                  : 'bg-emerald-200/50 text-emerald-900'
+                              }`}>
+                                <Icon className="w-3 h-3" />
+                                <span>
+                                  {String(block.horaInicio).padStart(2, '0')}:00 - {String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')}:00 ({duration}h)
                                 </span>
+                              </span>
 
-                                {block.materia && (
-                                  <span 
-                                    className="w-2 h-2 rounded-full shrink-0" 
-                                    style={{ backgroundColor: subjectColor }} 
-                                    title={block.materia}
-                                  />
-                                )}
+                              {/* Action Buttons: Edit / Delete on right (always visible or hover) */}
+                              <div className="flex items-center gap-1 md:opacity-0 md:group-hover/item:opacity-100 transition-opacity no-print">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEdit(block);
+                                  }}
+                                  className="p-1 rounded hover:bg-zinc-200/70 text-zinc-500 hover:text-zinc-800 transition-colors cursor-pointer"
+                                  title="Editar"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteBlock(block.id);
+                                  }}
+                                  className="p-1 rounded hover:bg-zinc-200/70 text-zinc-500 hover:text-rose-600 transition-colors cursor-pointer"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
                               </div>
+                            </div>
 
-                              <div className="font-bold text-xs text-zinc-900 leading-tight truncate">
-                                {block.titulo}
+                            {/* Block Title */}
+                            <div className="font-bold text-xs sm:text-sm text-zinc-900 leading-tight">
+                              {block.titulo}
+                            </div>
+
+                            {/* Subject */}
+                            {block.materia && (
+                              <div className="flex items-center gap-1.5 mt-1 text-[11px] font-semibold text-blue-900">
+                                <span 
+                                  className="w-1.5 h-1.5 rounded-full shrink-0" 
+                                  style={{ backgroundColor: subjectColor }} 
+                                />
+                                <span className="truncate">{block.materia}</span>
                               </div>
+                            )}
 
-                              {block.materia && (
-                                <div className="text-[10px] font-semibold text-blue-800 truncate mt-0.5">
-                                  {block.materia}
-                                </div>
-                              )}
-
-                              {block.categoria === 'estudo' && block.tipoEstudo && (
-                                <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded mt-1 shrink-0 ${
+                            {/* Tipo de Estudo (Doutrina, Lei Seca, Jurisprudência) */}
+                            {block.categoria === 'estudo' && block.tipoEstudo && (
+                              <div className="mt-1.5">
+                                <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
                                   block.tipoEstudo === 'doutrina'
                                     ? 'bg-zinc-100 text-zinc-800 border border-zinc-200'
                                     : block.tipoEstudo === 'lei_seca'
                                     ? 'bg-amber-100/70 text-amber-900 border border-amber-200'
                                     : 'bg-emerald-100/70 text-emerald-900 border border-emerald-200'
                                 }`}>
-                                  {block.tipoEstudo === 'doutrina' && <BookOpen className="w-2.5 h-2.5 shrink-0 text-zinc-600" />}
-                                  {block.tipoEstudo === 'lei_seca' && <Scale className="w-2.5 h-2.5 shrink-0 text-amber-700" />}
-                                  {block.tipoEstudo === 'jurisprudencia' && <Landmark className="w-2.5 h-2.5 shrink-0 text-emerald-700" />}
+                                  {block.tipoEstudo === 'doutrina' && <BookOpen className="w-2.5 h-2.5 text-zinc-600" />}
+                                  {block.tipoEstudo === 'lei_seca' && <Scale className="w-2.5 h-2.5 text-amber-700" />}
+                                  {block.tipoEstudo === 'jurisprudencia' && <Landmark className="w-2.5 h-2.5 text-emerald-700" />}
                                   <span>
                                     {block.tipoEstudo === 'doutrina' ? 'Doutrina' : block.tipoEstudo === 'lei_seca' ? 'Lei Seca' : 'Jurisprudência'}
                                   </span>
                                 </span>
-                              )}
+                              </div>
+                            )}
 
-                              {linkedPonto && (
-                                <div 
-                                  className="text-[9px] bg-white/75 border border-blue-200 text-blue-900 rounded px-1.5 py-0.5 mt-1 flex items-center gap-1 max-w-full"
-                                  title={`Tópico: ${linkedPonto.titulo}`}
-                                >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                                  <span className="font-semibold truncate">Tópico: {linkedPonto.titulo}</span>
-                                  {linkedPonto.lido && <span className="text-emerald-600 font-bold ml-auto text-[9px] shrink-0">✓</span>}
-                                </div>
-                              )}
+                            {/* Linked Topic */}
+                            {linkedPonto && (
+                              <div 
+                                className="text-[10px] bg-white/70 border border-blue-200/80 text-blue-900 rounded-md px-2 py-1 mt-1.5 flex items-center gap-1.5 max-w-full shadow-3xs"
+                                title={`Tópico: ${linkedPonto.titulo}`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                                <span className="font-semibold truncate">Tópico: {linkedPonto.titulo}</span>
+                                {linkedPonto.lido && <span className="text-emerald-600 font-bold ml-auto text-[9px] shrink-0">✓</span>}
+                              </div>
+                            )}
 
-                              {block.notas && (
-                                <div className="text-[10px] text-zinc-500 font-sans truncate mt-0.5">
-                                  {block.notas}
+                            {/* Private Notes */}
+                            {block.notas && (
+                              <div className="text-[10px] text-zinc-500 font-sans mt-1.5 italic bg-white/60 p-2 rounded border border-zinc-150 leading-relaxed truncate">
+                                {block.notas}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-h-[100px] rounded-xl border border-dashed border-zinc-200 flex flex-col items-center justify-center text-center p-4 bg-zinc-50/30">
+                      <p className="text-[11px] text-zinc-400 font-medium">Nenhum compromisso para este dia</p>
+                    </div>
+                  )}
+
+                  {/* Add action button at bottom of day list */}
+                  <button
+                    onClick={() => handleOpenAddAt(d.id, 8)}
+                    className="w-full py-2.5 border border-dashed border-zinc-200 hover:border-zinc-400 rounded-xl text-zinc-400 hover:text-zinc-700 transition-all text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer bg-zinc-50/20 hover:bg-zinc-50/80 no-print"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Adicionar Atividade
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Hour by Hour Schedule Grid */
+        <div className="bg-white border border-zinc-200/90 rounded-xl overflow-hidden shadow-3xs">
+          <div className="overflow-x-auto lg:overflow-x-visible">
+            <table className="w-full text-left border-collapse min-w-[760px] lg:min-w-0">
+              {/* Table Header: Days of the week */}
+              <thead>
+                <tr className="bg-zinc-50/90 border-b border-zinc-200 text-xs font-bold text-zinc-800">
+                  <th className="w-16 sm:w-20 p-3 text-center border-r border-zinc-200 font-mono text-zinc-500">
+                    Horário
+                  </th>
+                  {DIAS_SEMANA.filter(d => selectedDayTab === 'todos' || selectedDayTab === d.id).map(d => {
+                    const blocks = gradeSemanal.filter(b => b.diaSemana === d.id);
+                    const studyH = blocks.filter(b => b.categoria === 'estudo').reduce((a, b) => a + (b.horaFim - b.horaInicio), 0);
+                    const workH = blocks.filter(b => b.categoria === 'trabalho').reduce((a, b) => a + (b.horaFim - b.horaInicio), 0);
+                    const otherH = blocks.filter(b => b.categoria === 'afazeres').reduce((a, b) => a + (b.horaFim - b.horaInicio), 0);
+
+                    return (
+                      <th key={d.id} className="p-2 sm:p-3 border-r border-zinc-200/80 last:border-r-0 min-w-[90px] sm:min-w-[105px] lg:min-w-[125px]">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs sm:text-sm font-serif font-bold text-zinc-900 truncate">{d.nome}</span>
+                          <button
+                            onClick={() => handleOpenAddAt(d.id, 8)}
+                            className="p-1 rounded text-zinc-400 hover:text-zinc-900 hover:bg-zinc-200/60 transition-colors shrink-0"
+                            title={`Adicionar atividade em ${d.nome}`}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1 mt-1 font-mono text-[9px] text-zinc-500 font-normal">
+                          {workH > 0 && <span className="text-amber-700 font-semibold">{workH}h trab</span>}
+                          {studyH > 0 && <span className="text-blue-700 font-semibold">{studyH}h est</span>}
+                          {otherH > 0 && <span className="text-emerald-700 font-semibold">{otherH}h afaz</span>}
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+
+              {/* Table Body: Hour Rows */}
+              <tbody className="divide-y divide-zinc-200/70 text-xs">
+                {hoursRange.map(hour => {
+                  const hourFormatted = `${String(hour).padStart(2, '0')}:00`;
+
+                  return (
+                    <tr key={hour} className="hover:bg-zinc-50/40 transition-colors">
+                      {/* Hour Column */}
+                      <td className="p-2 text-center font-mono text-zinc-400 font-semibold text-[11px] sm:text-xs border-r border-zinc-200 bg-zinc-50/40 select-none">
+                        {hourFormatted}
+                      </td>
+
+                      {/* Day Cells */}
+                      {DIAS_SEMANA.filter(d => selectedDayTab === 'todos' || selectedDayTab === d.id).map(d => {
+                        const block = getBlockForSlot(d.id, hour);
+                        const isFirstHour = block && block.horaInicio === hour;
+
+                        // If there is a block spanning multiple hours and this is not the first hour, we still render a cell connected visually
+                        if (block && !isFirstHour) {
+                          return (
+                            <td 
+                              key={d.id} 
+                              onClick={() => handleOpenEdit(block)}
+                              className="p-1 border-r border-zinc-200/70 last:border-r-0 cursor-pointer bg-zinc-50/10"
+                            >
+                              <div className={`h-8 rounded px-1.5 flex items-center justify-between text-[10px] opacity-85 ${
+                                block.categoria === 'trabalho'
+                                  ? 'bg-amber-100/40 border-x border-amber-300/60 text-amber-900'
+                                  : block.categoria === 'estudo'
+                                  ? 'bg-blue-100/40 border-x border-blue-300/60 text-blue-900'
+                                  : 'bg-emerald-100/40 border-x border-emerald-300/80 text-emerald-900'
+                              }`}>
+                                <span className="italic font-mono text-[9px] text-zinc-400 truncate">
+                                  (até {String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')}:00)
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        if (block && isFirstHour) {
+                          const duration = block.horaFim - block.horaInicio;
+                          const subjectColor = block.materia ? (materiasCores[block.materia] || '#2563EB') : undefined;
+                          const linkedPonto = block.pontoId ? pontos.find(p => p.id === block.pontoId) : null;
+
+                          return (
+                            <td 
+                              key={d.id} 
+                              onClick={() => handleOpenEdit(block)}
+                              className="p-1 border-r border-zinc-200/70 last:border-r-0 cursor-pointer transition-all hover:brightness-95"
+                            >
+                              <div className={`p-1.5 sm:p-2 rounded-lg border shadow-3xs transition-all ${
+                                block.categoria === 'trabalho'
+                                  ? 'bg-amber-50/90 border-amber-300 text-amber-950 hover:border-amber-400'
+                                  : block.categoria === 'estudo'
+                                  ? 'bg-blue-50/90 border-blue-300 text-blue-950 hover:border-blue-400'
+                                  : 'bg-emerald-50/90 border-emerald-300 text-emerald-950 hover:border-emerald-400'
+                              }`}>
+                                <div className="flex items-center justify-between gap-1 mb-0.5 overflow-hidden">
+                                  <span className={`inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-bold font-mono uppercase px-1 py-0.2 rounded shrink-0 whitespace-nowrap truncate max-w-full ${
+                                    block.categoria === 'trabalho'
+                                      ? 'bg-amber-200/70 text-amber-900'
+                                      : block.categoria === 'estudo'
+                                      ? 'bg-blue-200/70 text-blue-900'
+                                      : 'bg-emerald-200/70 text-emerald-900'
+                                  }`}>
+                                    {block.categoria === 'trabalho' && <Briefcase className="w-2 h-2" />}
+                                    {block.categoria === 'estudo' && <BookOpen className="w-2 h-2" />}
+                                    {block.categoria === 'afazeres' && <Smile className="w-2 h-2" />}
+                                    <span className="hidden xl:inline">{String(block.horaInicio).padStart(2, '0')}h-{String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')}h ({duration}h)</span>
+                                    <span className="xl:hidden">{String(block.horaInicio).padStart(2, '0')}-{String(block.horaFim === 24 ? 0 : block.horaFim).padStart(2, '0')} ({duration}h)</span>
+                                  </span>
+
+                                  {block.materia && (
+                                    <span 
+                                      className="w-1.5 h-1.5 rounded-full shrink-0" 
+                                      style={{ backgroundColor: subjectColor }} 
+                                      title={block.materia}
+                                    />
+                                  )}
                                 </div>
-                              )}
+
+                                <div className="font-bold text-[11px] sm:text-xs text-zinc-900 leading-tight truncate" title={block.titulo}>
+                                  {block.titulo}
+                                </div>
+
+                                {block.materia && (
+                                  <div className="text-[10px] font-semibold text-blue-800 truncate mt-0.5" title={block.materia}>
+                                    {block.materia}
+                                  </div>
+                                )}
+
+                                {block.categoria === 'estudo' && block.tipoEstudo && (
+                                  <span className={`inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-bold uppercase px-1 py-0.2 rounded mt-1 shrink-0 ${
+                                    block.tipoEstudo === 'doutrina'
+                                      ? 'bg-zinc-100 text-zinc-800 border border-zinc-200'
+                                      : block.tipoEstudo === 'lei_seca'
+                                      ? 'bg-amber-100/70 text-amber-900 border border-amber-200'
+                                      : 'bg-emerald-100/70 text-emerald-900 border border-emerald-200'
+                                  }`}>
+                                    {block.tipoEstudo === 'doutrina' && <BookOpen className="w-2 h-2 shrink-0 text-zinc-600" />}
+                                    {block.tipoEstudo === 'lei_seca' && <Scale className="w-2 h-2 shrink-0 text-amber-700" />}
+                                    {block.tipoEstudo === 'jurisprudencia' && <Landmark className="w-2 h-2 shrink-0 text-emerald-700" />}
+                                    <span className="hidden xl:inline">
+                                      {block.tipoEstudo === 'doutrina' ? 'Doutrina' : block.tipoEstudo === 'lei_seca' ? 'Lei Seca' : 'Jurisprudência'}
+                                    </span>
+                                    <span className="xl:hidden">
+                                      {block.tipoEstudo === 'doutrina' ? 'Dout' : block.tipoEstudo === 'lei_seca' ? 'Lei' : 'Jur'}
+                                    </span>
+                                  </span>
+                                )}
+
+                                {linkedPonto && (
+                                  <div 
+                                    className="text-[9px] bg-white/75 border border-blue-200 text-blue-900 rounded px-1.5 py-0.5 mt-1 flex items-center gap-1 max-w-full"
+                                    title={`Tópico: ${linkedPonto.titulo}`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                                    <span className="font-semibold truncate">Tópico: {linkedPonto.titulo}</span>
+                                    {linkedPonto.lido && <span className="text-emerald-600 font-bold ml-auto text-[9px] shrink-0">✓</span>}
+                                  </div>
+                                )}
+
+                                {block.notas && (
+                                  <div className="text-[10px] text-zinc-500 font-sans truncate mt-0.5" title={block.notas}>
+                                    {block.notas}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        // Empty slot: clicking allows adding a block
+                        return (
+                          <td 
+                            key={d.id}
+                            onClick={() => handleOpenAddAt(d.id, hour)}
+                            className="p-0.5 sm:p-1 border-r border-zinc-200/60 last:border-r-0 hover:bg-zinc-100/60 transition-colors cursor-pointer group"
+                            title={`Clique para adicionar atividade às ${hourFormatted} na ${d.nome}`}
+                          >
+                            <div className="h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <span className="text-[10px] font-bold text-zinc-400 inline-flex items-center gap-0.5">
+                                <Plus className="w-3 h-3" /> Adicionar
+                              </span>
                             </div>
                           </td>
                         );
-                      }
-
-                      // Empty slot: clicking allows adding a block
-                      return (
-                        <td 
-                          key={d.id}
-                          onClick={() => handleOpenAddAt(d.id, hour)}
-                          className="p-1 border-r border-zinc-200/60 last:border-r-0 hover:bg-zinc-100/60 transition-colors cursor-pointer group"
-                          title={`Clique para adicionar atividade às ${hourFormatted} na ${d.nome}`}
-                        >
-                          <div className="h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-[10px] font-bold text-zinc-400 inline-flex items-center gap-0.5">
-                              <Plus className="w-3 h-3" /> Adicionar
-                            </span>
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Modal for Adding / Editing a Block */}
       {isModalOpen && (
