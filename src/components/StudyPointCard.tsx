@@ -20,7 +20,8 @@ import {
   Landmark,
   BookOpen,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Play
 } from 'lucide-react';
 
 interface StudyPointCardProps {
@@ -32,6 +33,7 @@ interface StudyPointCardProps {
   onDuplicate?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onStartFocus?: () => void;
 }
 
 export const StudyPointCard: React.FC<StudyPointCardProps> = ({
@@ -42,7 +44,8 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
   onEdit,
   onDuplicate,
   onMoveUp,
-  onMoveDown
+  onMoveDown,
+  onStartFocus
 }) => {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [isEditingQuestions, setIsEditingQuestions] = useState(false);
@@ -290,6 +293,19 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
             >
               {ponto.showNotes ? 'Fechar anotação' : 'Anotar'}
             </button>
+
+            {onStartFocus && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={onStartFocus}
+                  className="text-amber-600 hover:text-amber-800 font-semibold cursor-pointer transition-colors flex items-center gap-1"
+                >
+                  <Play className="w-3 h-3 fill-amber-600" />
+                  <span>Iniciar Foco</span>
+                </button>
+              </>
+            )}
           </div>
 
           {/* Expanded Notes Section */}

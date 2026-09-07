@@ -1,6 +1,6 @@
 {
   "name": "Estante de Estudos - Cronograma e Controle",
-  "description": "Plataforma personalizada para organização de pontos de estudo, controle de leitura, percentual de acertos em questões, classificação por dificuldade e acompanhamento de editais.",
+  "description": "Plataforma personalizada no estilo Notion para cronogramas por edital, organização semanal hora a hora, modo foco com temporizador de estudo líquido e análise de desempenho por matéria e assunto.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

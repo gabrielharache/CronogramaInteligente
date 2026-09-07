@@ -52,7 +52,38 @@ export interface Edital {
 }
 
 export type ViewMode = 'semanal' | 'calendario' | 'materias';
-export type TabMode = 'pontos' | 'editais' | 'desempenho';
+export type TabMode = 'pontos' | 'organizacao_semanal' | 'foco' | 'revisao' | 'editais' | 'desempenho';
+
+export type CategoriaHorario = 'estudo' | 'trabalho' | 'afazeres';
+
+export interface BlocoHorario {
+  id: string;
+  diaSemana: number; // 0 = Domingo, 1 = Segunda, 2 = Terça, 3 = Quarta, 4 = Quinta, 5 = Sexta, 6 = Sábado
+  horaInicio: number; // 0 to 23 (e.g. 8 for 08:00)
+  horaFim: number; // 1 to 24 (e.g. 12 for 12:00)
+  categoria: CategoriaHorario;
+  titulo: string;
+  materia?: string;
+  cor?: string;
+  notas?: string;
+  pontoId?: string;
+  tipoEstudo?: TipoEstudo;
+}
+
+export interface SessaoEstudo {
+  id: string;
+  cronogramaId?: string;
+  materia: string;
+  assunto: string;
+  pontoId?: string;
+  duracaoSegundos: number; // net study duration in seconds
+  data: string; // YYYY-MM-DD
+  inicioTimestamp: number;
+  fimTimestamp: number;
+  tipoTimer: 'cronometro' | 'pomodoro';
+  notas?: string;
+  tipoEstudo?: TipoEstudo;
+}
 
 export interface AppState {
   cronogramas: Cronograma[];
@@ -60,11 +91,14 @@ export interface AppState {
   pontos: PontoEstudo[];
   editais: Edital[];
   materiasCores: Record<string, string>;
+  gradeSemanal?: BlocoHorario[];
+  sessoesEstudo?: SessaoEstudo[];
   ui: {
     view: ViewMode;
     calMes?: string; // YYYY-MM
     activeTab: TabMode;
     tipoEstudoFilter?: TipoEstudo | 'todos';
+    sidebarCollapsed?: boolean;
   };
   migs?: string[];
 }

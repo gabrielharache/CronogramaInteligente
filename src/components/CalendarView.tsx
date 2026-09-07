@@ -77,7 +77,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   // Points grouped by date
   const pointsByDate = useMemo(() => {
     const map: Record<string, PontoEstudo[]> = {};
-    pontos.forEach(p => {
+    (pontos || []).forEach(p => {
       if (p.data) {
         if (!map[p.data]) map[p.data] = [];
         map[p.data].push(p);

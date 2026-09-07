@@ -12,6 +12,7 @@ interface SubjectGroupViewProps {
   onDuplicatePonto: (ponto: PontoEstudo) => void;
   onNovoPontoNaMateria: (materia: string) => void;
   onMovePonto?: (id: string, direction: 'up' | 'down') => void;
+  onStartFocus?: (ponto: PontoEstudo) => void;
 }
 
 export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
@@ -22,11 +23,12 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
   onEditPonto,
   onDuplicatePonto,
   onNovoPontoNaMateria,
-  onMovePonto
+  onMovePonto,
+  onStartFocus
 }) => {
   // Group points by subject
   const grouped: Record<string, PontoEstudo[]> = {};
-  pontos.forEach(p => {
+  (pontos || []).forEach(p => {
     if (!grouped[p.materia]) grouped[p.materia] = [];
     grouped[p.materia].push(p);
   });
@@ -160,6 +162,7 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
                     onDuplicate={() => onDuplicatePonto(ponto)}
                     onMoveUp={idx > 0 ? () => onMovePonto?.(ponto.id, 'up') : undefined}
                     onMoveDown={idx < items.length - 1 ? () => onMovePonto?.(ponto.id, 'down') : undefined}
+                    onStartFocus={onStartFocus ? () => onStartFocus(ponto) : undefined}
                   />
                 ))}
               </div>

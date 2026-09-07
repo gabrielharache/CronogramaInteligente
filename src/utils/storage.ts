@@ -1,4 +1,4 @@
-import { AppState, PontoEstudo, Edital, Cronograma } from '../types';
+import { AppState, PontoEstudo, Edital, Cronograma, BlocoHorario, SessaoEstudo } from '../types';
 import { DEFAULT_SUBJECT_COLORS, RAW_SEED_PONTOS, RAW_SEED_EDITAIS, DEFAULT_CRONOGRAMAS } from '../data/seed';
 import { uid } from './helpers';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -8,6 +8,163 @@ const GUEST_STORAGE_KEY = 'estante_estudos_app_v4';
 export const getUserStorageKey = (userId?: string): string => {
   return userId ? `estante_estudos_user_${userId}` : GUEST_STORAGE_KEY;
 };
+
+export function getDefaultGradeSemanal(): BlocoHorario[] {
+  return [
+    // Segunda a Sexta: Trabalho 08:00 - 12:00 e 13:00 - 17:00
+    ...[1, 2, 3, 4, 5].flatMap(dia => [
+      {
+        id: `trab-m-${dia}`,
+        diaSemana: dia,
+        horaInicio: 8,
+        horaFim: 12,
+        categoria: 'trabalho' as const,
+        titulo: 'Expediente de Trabalho',
+        notas: 'Atividades profissionais e demandas da equipe'
+      },
+      {
+        id: `trab-t-${dia}`,
+        diaSemana: dia,
+        horaInicio: 13,
+        horaFim: 17,
+        categoria: 'trabalho' as const,
+        titulo: 'Expediente de Trabalho',
+        notas: 'Atividades e processos'
+      },
+      {
+        id: `estudo-n-${dia}`,
+        diaSemana: dia,
+        horaInicio: 19,
+        horaFim: 22,
+        categoria: 'estudo' as const,
+        titulo: dia === 1 ? 'Direito Constitucional' : dia === 2 ? 'Direito Administrativo' : dia === 3 ? 'Processo Civil' : dia === 4 ? 'Direito Tributário' : 'Direito Civil',
+        materia: dia === 1 ? 'Constitucional' : dia === 2 ? 'Administrativo' : dia === 3 ? 'Processo Civil' : dia === 4 ? 'Tributário' : 'Civil',
+        notas: 'Leitura de doutrina e resolução de questões do ciclo'
+      }
+    ]),
+    // Outros afazeres rotineiros (Almoço, Treino)
+    ...[1, 2, 3, 4, 5].map(dia => ({
+      id: `afaz-alm-${dia}`,
+      diaSemana: dia,
+      horaInicio: 12,
+      horaFim: 13,
+      categoria: 'afazeres' as const,
+      titulo: 'Almoço & Descanso'
+    })),
+    ...[1, 3, 5].map(dia => ({
+      id: `afaz-treino-${dia}`,
+      diaSemana: dia,
+      horaInicio: 17,
+      horaFim: 18,
+      categoria: 'afazeres' as const,
+      titulo: 'Atividade Física / Academia'
+    })),
+    // Sábado: Estudos pela manhã e lazer à tarde
+    {
+      id: 'estudo-sab-1',
+      diaSemana: 6,
+      horaInicio: 8,
+      horaFim: 12,
+      categoria: 'estudo' as const,
+      titulo: 'Simulado Semanal & Revisão',
+      materia: 'Administrativo',
+      notas: 'Revisão dos pontos da semana e questões'
+    },
+    {
+      id: 'afaz-sab-lazer',
+      diaSemana: 6,
+      horaInicio: 14,
+      horaFim: 19,
+      categoria: 'afazeres' as const,
+      titulo: 'Lazer e Família'
+    },
+    // Domingo: Revisão leve e descanso
+    {
+      id: 'estudo-dom-1',
+      diaSemana: 0,
+      horaInicio: 9,
+      horaFim: 12,
+      categoria: 'estudo' as const,
+      titulo: 'Lei Seca e Jurisprudência (STF/STJ)',
+      materia: 'Constitucional',
+      notas: 'Leitura de informativos'
+    },
+    {
+      id: 'afaz-dom-lazer',
+      diaSemana: 0,
+      horaInicio: 13,
+      horaFim: 20,
+      categoria: 'afazeres' as const,
+      titulo: 'Descanso e Organização Pessoal'
+    }
+  ];
+}
+
+export function getDefaultSessoesEstudo(): SessaoEstudo[] {
+  const agora = Date.now();
+  return [
+    {
+      id: 'sessao-1',
+      cronogramaId: 'cronograma-geral',
+      materia: 'Constitucional',
+      assunto: 'Teoria Geral da Constituição e Neoconstitucionalismo',
+      duracaoSegundos: 5400, // 1h 30m
+      data: '2026-09-01',
+      inicioTimestamp: agora - 86400000 * 6,
+      fimTimestamp: agora - 86400000 * 6 + 5400000,
+      tipoTimer: 'pomodoro',
+      notas: 'Finalizada leitura e 40 questões resolvidas.'
+    },
+    {
+      id: 'sessao-2',
+      cronogramaId: 'cronograma-geral',
+      materia: 'Administrativo',
+      assunto: 'Organização Administrativa (Parte 01)',
+      duracaoSegundos: 7200, // 2h 00m
+      data: '2026-08-31',
+      inicioTimestamp: agora - 86400000 * 7,
+      fimTimestamp: agora - 86400000 * 7 + 7200000,
+      tipoTimer: 'cronometro',
+      notas: 'Estudo focado em desconcentração vs descentralização.'
+    },
+    {
+      id: 'sessao-3',
+      cronogramaId: 'cronograma-geral',
+      materia: 'Processo Civil',
+      assunto: 'Normas Fundamentais e Princípios Processuais',
+      duracaoSegundos: 3600, // 1h 00m
+      data: '2026-09-02',
+      inicioTimestamp: agora - 86400000 * 5,
+      fimTimestamp: agora - 86400000 * 5 + 3600000,
+      tipoTimer: 'pomodoro',
+      notas: 'Art. 1º a 12 do CPC.'
+    },
+    {
+      id: 'sessao-4',
+      cronogramaId: 'cronograma-geral',
+      materia: 'Civil',
+      assunto: 'LINDB - Vigência e Aplicação da Lei',
+      duracaoSegundos: 4500, // 1h 15m
+      data: '2026-09-03',
+      inicioTimestamp: agora - 86400000 * 4,
+      fimTimestamp: agora - 86400000 * 4 + 4500000,
+      tipoTimer: 'cronometro',
+      notas: 'Leitura da LINDB com anotações doutrinárias.'
+    },
+    {
+      id: 'sessao-5',
+      cronogramaId: 'cronograma-geral',
+      materia: 'Constitucional',
+      assunto: 'Direitos e Deveres Individuais (Art. 5º)',
+      duracaoSegundos: 5400, // 1h 30m
+      data: '2026-09-07',
+      inicioTimestamp: agora - 10800000,
+      fimTimestamp: agora - 5400000,
+      tipoTimer: 'pomodoro',
+      notas: 'Foco nos incisos mais cobrados em prova.'
+    }
+  ];
+}
 
 // Cronograma totalmente vazio para novos usuários cadastrados
 export function getEmptyUserState(): AppState {
@@ -25,12 +182,15 @@ export function getEmptyUserState(): AppState {
     pontos: [],
     editais: [],
     materiasCores: {},
+    gradeSemanal: [],
+    sessoesEstudo: [],
     ui: {
       view: 'semanal',
       activeTab: 'pontos',
-      tipoEstudoFilter: 'todos'
+      tipoEstudoFilter: 'todos',
+      sidebarCollapsed: false
     },
-    migs: ['v4-visual-identity', 'v3-multi-cronogramas']
+    migs: ['v4-visual-identity', 'v3-multi-cronogramas', 'v5-weekly-focus']
   };
 }
 
@@ -69,12 +229,15 @@ export function getInitialState(): AppState {
     pontos: seedPontos,
     editais: seedEditais,
     materiasCores: { ...DEFAULT_SUBJECT_COLORS },
+    gradeSemanal: getDefaultGradeSemanal(),
+    sessoesEstudo: getDefaultSessoesEstudo(),
     ui: {
       view: 'semanal',
       activeTab: 'pontos',
-      tipoEstudoFilter: 'todos'
+      tipoEstudoFilter: 'todos',
+      sidebarCollapsed: false
     },
-    migs: ['v4-visual-identity']
+    migs: ['v4-visual-identity', 'v5-weekly-focus']
   };
 }
 
@@ -120,11 +283,20 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
 
   const editais: Edital[] = Array.isArray(parsed.editais) ? parsed.editais : [];
 
+  const gradeSemanal: BlocoHorario[] = Array.isArray(parsed.gradeSemanal)
+    ? parsed.gradeSemanal
+    : (fallbackToEmpty ? [] : getDefaultGradeSemanal());
+
+  const sessoesEstudo: SessaoEstudo[] = Array.isArray(parsed.sessoesEstudo)
+    ? parsed.sessoesEstudo
+    : (fallbackToEmpty ? [] : getDefaultSessoesEstudo());
+
   const ui = {
     view: parsed.ui?.view || 'semanal',
     activeTab: parsed.ui?.activeTab || 'pontos',
     calMes: parsed.ui?.calMes,
-    tipoEstudoFilter: parsed.ui?.tipoEstudoFilter || 'todos'
+    tipoEstudoFilter: parsed.ui?.tipoEstudoFilter || 'todos',
+    sidebarCollapsed: Boolean(parsed.ui?.sidebarCollapsed)
   };
 
   return {
@@ -133,8 +305,10 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
     pontos: migratedPontos,
     editais,
     materiasCores,
+    gradeSemanal,
+    sessoesEstudo,
     ui,
-    migs: ['v4-user-isolated']
+    migs: ['v4-user-isolated', 'v5-weekly-focus']
   };
 }
 

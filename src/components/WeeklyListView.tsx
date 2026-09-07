@@ -18,6 +18,7 @@ interface WeeklyListViewProps {
   onEditPonto: (ponto: PontoEstudo) => void;
   onDuplicatePonto: (ponto: PontoEstudo) => void;
   onNovoPonto: () => void;
+  onStartFocus?: (ponto: PontoEstudo) => void;
 }
 
 export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
@@ -28,7 +29,8 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
   onDeletePonto,
   onEditPonto,
   onDuplicatePonto,
-  onNovoPonto
+  onNovoPonto,
+  onStartFocus
 }) => {
   const hoje = hojeStr();
   const currentWeekStart = getWeekStart(hoje);
@@ -45,7 +47,7 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
 
   // Group filtered points by weekStart
   const groupedByWeek: Record<string, PontoEstudo[]> = {};
-  pontos.forEach(p => {
+  (pontos || []).forEach(p => {
     const ws = p.data ? getWeekStart(p.data) : 'sem-data';
     if (!groupedByWeek[ws]) groupedByWeek[ws] = [];
     groupedByWeek[ws].push(p);
@@ -188,6 +190,7 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
                     onDelete={() => onDeletePonto(ponto.id)}
                     onEdit={() => onEditPonto(ponto)}
                     onDuplicate={() => onDuplicatePonto(ponto)}
+                    onStartFocus={onStartFocus ? () => onStartFocus(ponto) : undefined}
                   />
                 ))}
               </div>

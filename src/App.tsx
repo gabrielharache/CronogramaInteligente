@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { AppState, PontoEstudo, Edital, EditalStatus, TabMode, ViewMode, TipoEstudo, Cronograma } from './types';
+import { AppState, PontoEstudo, Edital, EditalStatus, TabMode, ViewMode, TipoEstudo, Cronograma, BlocoHorario, SessaoEstudo } from './types';
 import { 
   loadLocalUserState, 
   fetchUserState, 
@@ -17,13 +17,17 @@ import { AuthPage } from './components/auth/AuthPage';
 
 // Components
 import { Header } from './components/Header';
+import { SidebarNav } from './components/SidebarNav';
 import { FilterBar } from './components/FilterBar';
 import { SidebarProgresso } from './components/SidebarProgresso';
 import { WeeklyListView } from './components/WeeklyListView';
 import { CalendarView } from './components/CalendarView';
 import { SubjectGroupView } from './components/SubjectGroupView';
+import { WeeklyScheduleView } from './components/WeeklyScheduleView';
+import { FocusTimerView } from './components/FocusTimerView';
 import { EditaisView } from './components/EditaisView';
 import { PerformanceView } from './components/PerformanceView';
+import { RevisaoView } from './components/RevisaoView';
 
 // Modals
 import { PontoModal } from './components/modals/PontoModal';
@@ -35,6 +39,7 @@ import { SubjectManagerModal } from './components/modals/SubjectManagerModal';
 import { ImportBackupModal } from './components/modals/ImportBackupModal';
 import { CronogramaManagerModal } from './components/modals/CronogramaManagerModal';
 import { ExamDateModal } from './components/modals/ExamDateModal';
+import { FocusDurationModal } from './components/modals/FocusDurationModal';
 
 interface CronogramaDashboardProps {
   userId?: string;
@@ -65,11 +70,111 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   const [detailPonto, setDetailPonto] = useState<PontoEstudo | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
+  // Focus configuration states
+  const [focusTargetPonto, setFocusTargetPonto] = useState<PontoEstudo | null>(null);
+  const [isFocusDurationModalOpen, setIsFocusDurationModalOpen] = useState(false);
+
   const [isReorganizeModalOpen, setIsReorganizeModalOpen] = useState(false);
   const [isSubjectManagerOpen, setIsSubjectManagerOpen] = useState(false);
   const [importTargetEdital, setImportTargetEdital] = useState<Edital | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isCronogramaManagerOpen, setIsCronogramaManagerOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Weekly Schedule & Focus Timer Handlers
+  const handleUpdateGrade = useCallback((novaGrade: BlocoHorario[]) => {
+    setState(prev => ({
+      ...prev,
+      gradeSemanal: novaGrade
+    }));
+  }, []);
+
+  // Active Focus Timer state managed at App level so it continues running across tabs
+  const [activeTimer, setActiveTimer] = useState<{
+    isRunning: boolean;
+    mode: 'cronometro' | 'pomodoro' | 'pausa';
+    secondsElapsed: number;
+    targetSeconds: number;
+    materia: string;
+    assunto: string;
+    pontoId?: string;
+    marcarComoLido: boolean;
+    notas: string;
+    tipoEstudo?: TipoEstudo;
+  }>({
+    isRunning: false,
+    mode: 'pomodoro',
+    secondsElapsed: 0,
+    targetSeconds: 50 * 60,
+    materia: '',
+    assunto: '',
+    marcarComoLido: true,
+    notas: ''
+  });
+
+  useEffect(() => {
+    if (!activeTimer.isRunning) return;
+    const interval = setInterval(() => {
+      setActiveTimer(prev => {
+        if (!prev.isRunning) return prev;
+        return { ...prev, secondsElapsed: prev.secondsElapsed + 1 };
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeTimer.isRunning]);
+
+  const handleStartFocus = useCallback((ponto: PontoEstudo) => {
+    setFocusTargetPonto(ponto);
+    setIsFocusDurationModalOpen(true);
+  }, []);
+
+  const handleConfirmStartFocus = useCallback((minutes: number, mode: 'pomodoro' | 'cronometro') => {
+    if (!focusTargetPonto) return;
+    setActiveTimer({
+      isRunning: true,
+      mode: mode,
+      secondsElapsed: 0,
+      targetSeconds: minutes * 60,
+      materia: focusTargetPonto.materia,
+      assunto: focusTargetPonto.titulo,
+      pontoId: focusTargetPonto.id,
+      marcarComoLido: true,
+      notas: focusTargetPonto.notas || '',
+      tipoEstudo: focusTargetPonto.tipoEstudo
+    });
+    setIsFocusDurationModalOpen(false);
+    setFocusTargetPonto(null);
+    setState(prev => ({
+      ...prev,
+      ui: { ...prev.ui, activeTab: 'foco' }
+    }));
+  }, [focusTargetPonto]);
+
+  const handleDeleteSessao = useCallback((id: string) => {
+    setState(prev => ({
+      ...prev,
+      sessoesEstudo: (prev.sessoesEstudo || []).filter(s => s.id !== id)
+    }));
+  }, []);
+
+  const handleSaveSessao = useCallback((novaSessaoData: Omit<SessaoEstudo, 'id'>, marcarPontoLidoId?: string) => {
+    const novaSessao: SessaoEstudo = {
+      ...novaSessaoData,
+      id: uid()
+    };
+    setState(prev => {
+      let nextPontos = prev.pontos;
+      if (marcarPontoLidoId) {
+        nextPontos = prev.pontos.map(p => p.id === marcarPontoLidoId ? { ...p, lido: true } : p);
+      }
+      return {
+        ...prev,
+        pontos: nextPontos,
+        sessoesEstudo: [novaSessao, ...(prev.sessoesEstudo || [])]
+      };
+    });
+  }, []);
 
   // State persistence: Auto-save at 30s, manual save, and revert capabilities
   const [lastSavedState, setLastSavedState] = useState<AppState>(() => loadLocalUserState(userId));
@@ -215,24 +320,25 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
   // Filter points belonging to active schedule (or all if activeCronogramaId === 'all')
   const activeSchedulePoints = useMemo(() => {
-    if (state.activeCronogramaId === 'all') {
-      return state.pontos;
+    const pts = state?.pontos || [];
+    if (!state?.activeCronogramaId || state.activeCronogramaId === 'all') {
+      return pts;
     }
-    return state.pontos.filter(p => p.cronogramaId === state.activeCronogramaId);
-  }, [state.pontos, state.activeCronogramaId]);
+    return pts.filter(p => p.cronogramaId === state.activeCronogramaId);
+  }, [state?.pontos, state?.activeCronogramaId]);
 
   // Unique list of subjects in the active schedule
   const materias = useMemo(() => {
     const fromPoints = activeSchedulePoints.map(p => p.materia);
-    const fromColors = Object.keys(state.materiasCores);
+    const fromColors = Object.keys(state?.materiasCores || {});
     const set = new Set([...fromPoints, ...fromColors]);
     return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt'));
-  }, [activeSchedulePoints, state.materiasCores]);
+  }, [activeSchedulePoints, state?.materiasCores]);
 
   // Subject counts
   const materiasCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    activeSchedulePoints.forEach(p => {
+    (activeSchedulePoints || []).forEach(p => {
       counts[p.materia] = (counts[p.materia] || 0) + 1;
     });
     return counts;
@@ -241,11 +347,11 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   // Global Subject counts (across all schedules)
   const globalMateriasCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    state.pontos.forEach(p => {
+    (state?.pontos || []).forEach(p => {
       counts[p.materia] = (counts[p.materia] || 0) + 1;
     });
     return counts;
-  }, [state.pontos]);
+  }, [state?.pontos]);
 
   // Study type counts
   const tipoEstudoCounts = useMemo(() => {
@@ -253,14 +359,14 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     let lei_seca = 0;
     let jurisprudencia = 0;
 
-    activeSchedulePoints.forEach(p => {
+    (activeSchedulePoints || []).forEach(p => {
       if (p.tipoEstudo === 'lei_seca') lei_seca++;
       else if (p.tipoEstudo === 'jurisprudencia') jurisprudencia++;
       else doutrina++;
     });
 
     return {
-      todos: activeSchedulePoints.length,
+      todos: (activeSchedulePoints || []).length,
       doutrina,
       lei_seca,
       jurisprudencia
@@ -1022,205 +1128,276 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] text-zinc-900 flex flex-col font-sans selection:bg-zinc-900 selection:text-white">
-      {/* Header */}
-      <Header
+    <div className="min-h-screen bg-[#f7f7f5] text-zinc-900 flex font-sans selection:bg-zinc-900 selection:text-white">
+      {/* Notion-style Left Sidebar Navigation */}
+      <SidebarNav
         state={state}
         activeTab={state.ui.activeTab}
         onTabChange={(tab) => setState(prev => ({ ...prev, ui: { ...prev.ui, activeTab: tab } }))}
-        onExport={() => exportBackup(state)}
-        onOpenImport={() => {
-          setImportTargetEdital(null);
-          setIsImportModalOpen(true);
-        }}
-        onOpenReorganize={() => setIsReorganizeModalOpen(true)}
-        onOpenSubjectManager={() => setIsSubjectManagerOpen(true)}
+        editaisCount={state.editais.length}
+        pontosCount={activeSchedulePoints.length}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
         onOpenCronogramaManager={() => setIsCronogramaManagerOpen(true)}
-        onSelectCronograma={handleSelectCronograma}
+        onOpenSubjectManager={() => setIsSubjectManagerOpen(true)}
         onOpenExamDateModal={() => setIsExamDateModalOpen(true)}
         onResetToInitial={handleResetToInitial}
-        onUpdatePonto={handleUpdatePonto}
-        isSaving={isSaving}
-        hasUnsavedChanges={hasUnsavedChanges}
-        lastSavedAt={lastSavedAt}
-        autoSaveCountdown={autoSaveCountdown}
-        onManualSave={handleManualSave}
-        onDiscardChanges={handleDiscardChanges}
+        onOpenReorganize={() => setIsReorganizeModalOpen(true)}
+        isTimerRunning={activeTimer.isRunning}
+        timerSecondsElapsed={activeTimer.secondsElapsed}
+        activeTimerMateria={activeTimer.materia}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl 2xl:max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* TAB 1: Pontos de Estudo */}
-        {state.ui.activeTab === 'pontos' && (
-          <div className={`flex flex-col ${state.ui.view === 'calendario' ? '' : 'lg:flex-row'} items-start gap-6`}>
-            {/* Left Column: Progresso, Por Matéria & Navegar (displayed when in weekly or subject view) */}
-            {state.ui.view !== 'calendario' && (
-              <SidebarProgresso
-                pontos={activeSchedulePoints}
-                materias={materias}
-                materiasCores={state.materiasCores}
-                selectedMateria={selectedMateria}
-                onSelectMateria={setSelectedMateria}
-                onViewModeChange={(v) => setState(prev => ({ ...prev, ui: { ...prev.ui, view: v } }))}
-              />
-            )}
+      {/* Main Column beside Sidebar */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <Header
+          state={state}
+          activeTab={state.ui.activeTab}
+          onTabChange={(tab) => setState(prev => ({ ...prev, ui: { ...prev.ui, activeTab: tab } }))}
+          onExport={() => exportBackup(state)}
+          onOpenImport={() => {
+            setImportTargetEdital(null);
+            setIsImportModalOpen(true);
+          }}
+          onOpenCronogramaManager={() => setIsCronogramaManagerOpen(true)}
+          onSelectCronograma={handleSelectCronograma}
+          onOpenExamDateModal={() => setIsExamDateModalOpen(true)}
+          onUpdatePonto={handleUpdatePonto}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
+          autoSaveCountdown={autoSaveCountdown}
+          onManualSave={handleManualSave}
+          onDiscardChanges={handleDiscardChanges}
+          onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+        />
 
-            {/* Right Column / Full Width: Filter Bar & Dynamic View */}
-            <div className="flex-1 min-w-0 w-full">
-              <FilterBar
-                search={search}
-                onSearchChange={setSearch}
-                selectedMateria={selectedMateria}
-                onMateriaChange={setSelectedMateria}
-                materias={materias}
-                materiasCores={state.materiasCores}
-                materiasCounts={materiasCounts}
-                cronogramas={state.cronogramas}
-                activeCronogramaId={state.activeCronogramaId}
-                onCronogramaChange={handleSelectCronograma}
-                onOpenCronogramaManager={() => setIsCronogramaManagerOpen(true)}
-                tipoEstudoFilter={tipoEstudoFilter}
-                onTipoEstudoFilterChange={setTipoEstudoFilter}
-                tipoEstudoCounts={tipoEstudoCounts}
-                statusFilter={statusFilter}
-                onStatusFilterChange={setStatusFilter}
-                diffFilter={diffFilter}
-                onDiffFilterChange={setDiffFilter}
-                viewMode={state.ui.view}
-                onViewModeChange={(v) => setState(prev => ({ ...prev, ui: { ...prev.ui, view: v } }))}
-                onNovoPonto={() => {
-                  setEditingPonto(null);
-                  setInitialDateForNewPonto(undefined);
-                  setInitialMateriaForNewPonto(selectedMateria !== 'todas' ? selectedMateria : undefined);
-                  setIsPontoModalOpen(true);
-                }}
-                totalFiltrados={filteredPontos.length}
-                totalGeral={activeSchedulePoints.length}
-              />
-
-              {/* View 1: Semanal (Accordion cards matching screenshot) */}
-              {state.ui.view === 'semanal' && (
-                <WeeklyListView
-                  pontos={filteredPontos}
-                  allPontos={activeSchedulePoints}
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-7xl 2xl:max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* TAB 1: Pontos de Estudo (Cronograma) */}
+          {state.ui.activeTab === 'pontos' && (
+            <div className={`flex flex-col ${state.ui.view === 'calendario' ? '' : 'lg:flex-row'} items-start gap-6`}>
+              {/* Left Column: Progresso, Por Matéria & Navegar (displayed when in weekly or subject view) */}
+              {state.ui.view !== 'calendario' && (
+                <SidebarProgresso
+                  pontos={activeSchedulePoints}
+                  materias={materias}
                   materiasCores={state.materiasCores}
-                  onUpdatePonto={handleUpdatePonto}
-                  onDeletePonto={handleDeletePonto}
-                  onEditPonto={(p) => {
-                    setEditingPonto(p);
-                    setIsPontoModalOpen(true);
-                  }}
-                  onDuplicatePonto={handleDuplicatePonto}
+                  selectedMateria={selectedMateria}
+                  onSelectMateria={setSelectedMateria}
+                  onViewModeChange={(v) => setState(prev => ({ ...prev, ui: { ...prev.ui, view: v } }))}
+                />
+              )}
+
+              {/* Right Column / Full Width: Filter Bar & Dynamic View */}
+              <div className="flex-1 min-w-0 w-full">
+                <FilterBar
+                  search={search}
+                  onSearchChange={setSearch}
+                  selectedMateria={selectedMateria}
+                  onMateriaChange={setSelectedMateria}
+                  materias={materias}
+                  materiasCores={state.materiasCores}
+                  materiasCounts={materiasCounts}
+                  cronogramas={state.cronogramas}
+                  activeCronogramaId={state.activeCronogramaId}
+                  onCronogramaChange={handleSelectCronograma}
+                  onOpenCronogramaManager={() => setIsCronogramaManagerOpen(true)}
+                  tipoEstudoFilter={tipoEstudoFilter}
+                  onTipoEstudoFilterChange={setTipoEstudoFilter}
+                  tipoEstudoCounts={tipoEstudoCounts}
+                  statusFilter={statusFilter}
+                  onStatusFilterChange={setStatusFilter}
+                  diffFilter={diffFilter}
+                  onDiffFilterChange={setDiffFilter}
+                  viewMode={state.ui.view}
+                  onViewModeChange={(v) => setState(prev => ({ ...prev, ui: { ...prev.ui, view: v } }))}
                   onNovoPonto={() => {
                     setEditingPonto(null);
+                    setInitialDateForNewPonto(undefined);
+                    setInitialMateriaForNewPonto(selectedMateria !== 'todas' ? selectedMateria : undefined);
                     setIsPontoModalOpen(true);
                   }}
+                  totalFiltrados={filteredPontos.length}
+                  totalGeral={activeSchedulePoints.length}
                 />
-              )}
 
-              {/* View 2: Calendário Contínuo */}
-              {state.ui.view === 'calendario' && (
-                <CalendarView
-                  pontos={filteredPontos}
-                  allPontos={activeSchedulePoints}
-                  materiasCores={state.materiasCores}
-                  onSelectPonto={(p) => {
-                    setDetailPonto(p);
-                    setIsDetailModalOpen(true);
-                  }}
-                  onMovePontoDate={handleMovePontoDate}
-                  onNovoPontoNaData={(dateStr) => {
-                    setEditingPonto(null);
-                    setInitialDateForNewPonto(dateStr);
-                    setIsPontoModalOpen(true);
-                  }}
-                  onUpdatePonto={handleUpdatePonto}
-                />
-              )}
+                {/* View 1: Semanal (Accordion cards matching screenshot) */}
+                {state.ui.view === 'semanal' && (
+                  <WeeklyListView
+                    pontos={filteredPontos}
+                    allPontos={activeSchedulePoints}
+                    materiasCores={state.materiasCores}
+                    onUpdatePonto={handleUpdatePonto}
+                    onDeletePonto={handleDeletePonto}
+                    onEditPonto={(p) => {
+                      setEditingPonto(p);
+                      setIsPontoModalOpen(true);
+                    }}
+                    onDuplicatePonto={handleDuplicatePonto}
+                    onNovoPonto={() => {
+                      setEditingPonto(null);
+                      setIsPontoModalOpen(true);
+                    }}
+                    onStartFocus={handleStartFocus}
+                  />
+                )}
 
-              {/* View 3: Agrupado por Matéria */}
-              {state.ui.view === 'materias' && (
-                <SubjectGroupView
-                  pontos={filteredPontos}
-                  materiasCores={state.materiasCores}
-                  onUpdatePonto={handleUpdatePonto}
-                  onDeletePonto={handleDeletePonto}
-                  onEditPonto={(p) => {
-                    setEditingPonto(p);
-                    setIsPontoModalOpen(true);
-                  }}
-                  onDuplicatePonto={handleDuplicatePonto}
-                  onNovoPontoNaMateria={(mat) => {
-                    setEditingPonto(null);
-                    setInitialMateriaForNewPonto(mat);
-                    setIsPontoModalOpen(true);
-                  }}
-                  onMovePonto={handleMovePonto}
-                />
-              )}
+                {/* View 2: Calendário Contínuo */}
+                {state.ui.view === 'calendario' && (
+                  <CalendarView
+                    pontos={filteredPontos}
+                    allPontos={activeSchedulePoints}
+                    materiasCores={state.materiasCores}
+                    onSelectPonto={(p) => {
+                      setDetailPonto(p);
+                      setIsDetailModalOpen(true);
+                    }}
+                    onMovePontoDate={handleMovePontoDate}
+                    onNovoPontoNaData={(dateStr) => {
+                      setEditingPonto(null);
+                      setInitialDateForNewPonto(dateStr);
+                      setIsPontoModalOpen(true);
+                    }}
+                    onUpdatePonto={handleUpdatePonto}
+                  />
+                )}
+
+                {/* View 3: Agrupado por Matéria */}
+                {state.ui.view === 'materias' && (
+                  <SubjectGroupView
+                    pontos={filteredPontos}
+                    materiasCores={state.materiasCores}
+                    onUpdatePonto={handleUpdatePonto}
+                    onDeletePonto={handleDeletePonto}
+                    onEditPonto={(p) => {
+                      setEditingPonto(p);
+                      setIsPontoModalOpen(true);
+                    }}
+                    onDuplicatePonto={handleDuplicatePonto}
+                    onNovoPontoNaMateria={(mat) => {
+                      setEditingPonto(null);
+                      setInitialMateriaForNewPonto(mat);
+                      setIsPontoModalOpen(true);
+                    }}
+                    onMovePonto={handleMovePonto}
+                    onStartFocus={handleStartFocus}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: Organização Semanal (Hour-by-hour planner) */}
+          {state.ui.activeTab === 'organizacao_semanal' && (
+            <WeeklyScheduleView
+              gradeSemanal={state.gradeSemanal || []}
+              grade={state.gradeSemanal || []}
+              materias={materias}
+              materiasCores={state.materiasCores}
+              onUpdateGrade={handleUpdateGrade}
+              pontos={activeSchedulePoints}
+            />
+          )}
+
+          {/* TAB 3: Modo Foco & Estudo Líquido */}
+          {state.ui.activeTab === 'foco' && (
+            <FocusTimerView
+              materias={materias}
+              materiasCores={state.materiasCores}
+              pontos={activeSchedulePoints}
+              sessoesEstudo={state.sessoesEstudo || []}
+              onSaveSessao={handleSaveSessao}
+              onDeleteSessao={handleDeleteSessao}
+              activeTimer={activeTimer}
+              onStartTimer={(cfg) => setActiveTimer({ ...cfg, isRunning: true, secondsElapsed: 0 })}
+              onPauseTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: false }))}
+              onResumeTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: true }))}
+              onResetTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: false, secondsElapsed: 0 }))}
+            />
+          )}
+
+          {/* TAB: Revisões (Radar de Revisão Ativa) */}
+          {state.ui.activeTab === 'revisao' && (
+            <RevisaoView
+              pontos={activeSchedulePoints}
+              materiasCores={state.materiasCores}
+              onSelectPonto={(p) => {
+                setDetailPonto(p);
+                setIsDetailModalOpen(true);
+              }}
+              onDuplicatePonto={handleDuplicatePonto}
+              onUpdatePonto={handleUpdatePonto}
+            />
+          )}
+
+          {/* TAB 4: Editais & Concursos */}
+          {state.ui.activeTab === 'editais' && (
+            <EditaisView
+              editais={state.editais}
+              cronogramas={state.cronogramas}
+              pontos={state.pontos}
+              onUpdateEdital={handleUpdateEdital}
+              onDeleteEdital={handleDeleteEdital}
+              onEditEdital={(e) => {
+                setEditingEdital(e);
+                setIsEditalModalOpen(true);
+              }}
+              onNovoEdital={() => {
+                setEditingEdital(null);
+                setIsEditalModalOpen(true);
+              }}
+              onSwitchToCronograma={handleSwitchToCronograma}
+              onCriarCronogramaParaEdital={handleCriarCronogramaParaEdital}
+              onOpenImportForEdital={handleOpenImportForEdital}
+              onOpenSmartImport={handleLaunchSmartStructurer}
+            />
+          )}
+
+          {/* TAB 5: Desempenho & Estatísticas (including liquid hours) */}
+          {state.ui.activeTab === 'desempenho' && (
+            <PerformanceView
+              pontos={activeSchedulePoints}
+              materiasCores={state.materiasCores}
+              sessoesEstudo={state.sessoesEstudo || []}
+              onSelectPonto={(p) => {
+                setDetailPonto(p);
+                setIsDetailModalOpen(true);
+              }}
+              onTabChange={(tab) => setState(prev => ({ ...prev, ui: { ...prev.ui, activeTab: tab } }))}
+            />
+          )}
+        </main>
+
+        {/* Clean Notion Footer */}
+        <footer className="mt-auto border-t border-zinc-200/80 bg-white py-4 px-4 sm:px-6 text-xs text-zinc-500">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>
+              Estante de Estudos • Cronograma por Edital, Doutrina, Lei Seca & Jurisprudência
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => exportBackup(state)}
+                className="text-zinc-900 hover:underline font-semibold cursor-pointer"
+              >
+                Exportar Backup (JSON)
+              </button>
+              <span>•</span>
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="text-zinc-600 hover:text-zinc-900 cursor-pointer"
+              >
+                Alimentar / Importar
+              </button>
             </div>
           </div>
-        )}
-
-        {/* TAB 2: Editais & Concursos */}
-        {state.ui.activeTab === 'editais' && (
-          <EditaisView
-            editais={state.editais}
-            cronogramas={state.cronogramas}
-            pontos={state.pontos}
-            onUpdateEdital={handleUpdateEdital}
-            onDeleteEdital={handleDeleteEdital}
-            onEditEdital={(e) => {
-              setEditingEdital(e);
-              setIsEditalModalOpen(true);
-            }}
-            onNovoEdital={() => {
-              setEditingEdital(null);
-              setIsEditalModalOpen(true);
-            }}
-            onSwitchToCronograma={handleSwitchToCronograma}
-            onCriarCronogramaParaEdital={handleCriarCronogramaParaEdital}
-            onOpenImportForEdital={handleOpenImportForEdital}
-            onOpenSmartImport={handleLaunchSmartStructurer}
-          />
-        )}
-
-        {/* TAB 3: Desempenho & Estatísticas */}
-        {state.ui.activeTab === 'desempenho' && (
-          <PerformanceView
-            pontos={activeSchedulePoints}
-            materiasCores={state.materiasCores}
-            onSelectPonto={(p) => {
-              setDetailPonto(p);
-              setIsDetailModalOpen(true);
-            }}
-          />
-        )}
-      </main>
-
-      {/* Clean Notion Footer */}
-      <footer className="mt-auto border-t border-zinc-200/80 bg-white py-4 px-4 sm:px-6 text-xs text-zinc-500">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>
-            Estante de Estudos • Cronograma por Edital, Doutrina, Lei Seca & Jurisprudência
-          </span>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => exportBackup(state)}
-              className="text-zinc-900 hover:underline font-semibold cursor-pointer"
-            >
-              Exportar Backup (JSON)
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="text-zinc-600 hover:text-zinc-900 cursor-pointer"
-            >
-              Alimentar / Importar
-            </button>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
 
       {/* Modals */}
       <EditalSmartImportModal
@@ -1307,6 +1484,18 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
           setIsPontoModalOpen(true);
         }}
         onDuplicatePonto={handleDuplicatePonto}
+        onStartFocus={handleStartFocus}
+      />
+
+      <FocusDurationModal
+        isOpen={isFocusDurationModalOpen}
+        onClose={() => {
+          setIsFocusDurationModalOpen(false);
+          setFocusTargetPonto(null);
+        }}
+        ponto={focusTargetPonto}
+        materiaCor={focusTargetPonto ? (state.materiasCores[focusTargetPonto.materia] || '#d97706') : '#d97706'}
+        onConfirm={handleConfirmStartFocus}
       />
 
       <ReorganizeModal

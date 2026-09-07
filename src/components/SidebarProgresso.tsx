@@ -120,7 +120,7 @@ export const SidebarProgresso: React.FC<SidebarProgressoProps> = ({
         </div>
 
         <div className="space-y-2 max-h-[380px] overflow-y-auto no-scrollbar pr-1">
-          {subjectStats.map(({ materia, total: subTotal, done: subDone }) => {
+          {subjectStats.map(({ materia, total: subTotal, done: subDone, color }) => {
             const isSelected = selectedMateria === materia;
             const subPct = subTotal > 0 ? (subDone / subTotal) * 100 : 0;
 
@@ -133,9 +133,12 @@ export const SidebarProgresso: React.FC<SidebarProgressoProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between text-xs font-medium">
-                  <span className={`truncate ${isSelected ? 'font-bold text-zinc-900' : 'text-zinc-700'}`}>
-                    {materia}
-                  </span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-3xs" style={{ backgroundColor: color }} />
+                    <span className={`truncate ${isSelected ? 'font-bold text-zinc-900' : 'text-zinc-700'}`}>
+                      {materia}
+                    </span>
+                  </div>
                   <span className="font-mono text-[11px] text-zinc-500 shrink-0 ml-2">
                     {subDone}/{subTotal}
                   </span>
@@ -144,8 +147,8 @@ export const SidebarProgresso: React.FC<SidebarProgressoProps> = ({
                 {/* Slim progress bar */}
                 <div className="w-full bg-zinc-100 h-1 rounded-full overflow-hidden mt-1.5">
                   <div 
-                    className="bg-[#15803d] h-full rounded-full transition-all duration-300"
-                    style={{ width: `${subPct}%` }}
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{ width: `${subPct}%`, backgroundColor: color }}
                   />
                 </div>
               </button>
