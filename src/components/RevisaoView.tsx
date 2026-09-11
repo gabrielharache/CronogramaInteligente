@@ -229,17 +229,11 @@ export const RevisaoView: React.FC<RevisaoViewProps> = ({
         {/* Filters and Header */}
         <div className="p-4 border-b border-zinc-100 space-y-3" id="filtros-revisao-header">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h2 className="font-sans font-bold text-lg text-zinc-900 flex items-center gap-2">
-                <Flame className="w-5 h-5 text-amber-500" />
-                Radar de Revisão Ativa
-              </h2>
-              <p className="text-xs text-zinc-500">
-                Selecione os tópicos prioritários para revisar doutrina, lei seca e fazer novas baterias de questões.
-              </p>
-            </div>
+            <p className="text-xs text-zinc-500">
+              Selecione os tópicos prioritários para revisar doutrina, lei seca e fazer novas baterias de questões.
+            </p>
             
-            <div className="text-xs font-mono font-bold bg-zinc-100 border border-zinc-200 rounded-md px-2.5 py-1 text-zinc-700 self-start sm:self-auto">
+            <div className="text-xs font-mono font-bold bg-zinc-100 border border-zinc-200 rounded-md px-2.5 py-1 text-zinc-700 self-start sm:self-auto shrink-0">
               Exibindo {filteredRevisoes.length} de {pontosParaRevisao.length} itens
             </div>
           </div>

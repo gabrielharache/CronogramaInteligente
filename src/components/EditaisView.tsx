@@ -157,19 +157,11 @@ export const EditaisView: React.FC<EditaisViewProps> = ({
         </div>
       )}
 
-      {/* Top Banner */}
-      <div className="bg-white border border-zinc-200 rounded-xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-zinc-900 mb-0.5">
-            <FileText className="w-4 h-4 text-zinc-700" />
-            <h2 className="font-sans font-semibold text-lg text-zinc-900">
-              Editais & Concursos Cadastrados
-            </h2>
-          </div>
-          <p className="text-xs text-zinc-500">
-            Cadastre concursos, acompanhe a contagem regressiva da prova e suba arquivos <span className="font-mono text-zinc-700 font-semibold">.md</span> para alimentar automaticamente.
-          </p>
-        </div>
+      {/* Top Action Bar */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-3.5 sm:p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <p className="text-xs text-zinc-500">
+          Cadastre concursos, acompanhe a contagem regressiva da prova e suba arquivos <span className="font-mono text-zinc-700 font-semibold">.md</span> para alimentar automaticamente.
+        </p>
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button

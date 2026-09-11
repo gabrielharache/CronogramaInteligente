@@ -284,40 +284,29 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
         )}
 
         {!isZenMode && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="font-serif font-bold text-2xl sm:text-3xl text-zinc-900 tracking-tight flex items-center gap-2">
-                <span>Modo Foco & Estudo Líquido</span>
-              </h2>
-              <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">
-                Controle o tempo líquido de estudos por matéria e assunto com cronômetro personalizável.
-              </p>
-            </div>
-
+          <div className="flex items-center justify-end gap-2">
             {/* Top Controls */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsSoundEnabled(!isSoundEnabled)}
-                className={`p-2 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-                  isSoundEnabled 
-                    ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50' 
-                    : 'bg-zinc-100 border-zinc-200 text-zinc-400'
-                }`}
-                title={isSoundEnabled ? "Alerta sonoro ativado" : "Alerta sonoro silenciado"}
-              >
-                {isSoundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4" />}
-                <span className="hidden sm:inline">{isSoundEnabled ? 'Som Ativado' : 'Silencioso'}</span>
-              </button>
+            <button
+              onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+              className={`p-2 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                isSoundEnabled 
+                  ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50' 
+                  : 'bg-zinc-100 border-zinc-200 text-zinc-400'
+              }`}
+              title={isSoundEnabled ? "Alerta sonoro ativado" : "Alerta sonoro silenciado"}
+            >
+              {isSoundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4" />}
+              <span className="hidden sm:inline">{isSoundEnabled ? 'Som Ativado' : 'Silencioso'}</span>
+            </button>
 
-              <button
-                onClick={() => setIsZenMode(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 shadow-3xs transition-colors cursor-pointer"
-                title="Abrir cronômetro em modo imersivo"
-              >
-                <Maximize2 className="w-3.5 h-3.5 text-zinc-500" />
-                <span>Modo Imersivo</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setIsZenMode(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 shadow-3xs transition-colors cursor-pointer"
+              title="Abrir cronômetro em modo imersivo"
+            >
+              <Maximize2 className="w-3.5 h-3.5 text-zinc-500" />
+              <span>Modo Imersivo</span>
+            </button>
           </div>
         )}
 

@@ -316,42 +316,34 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
         }
       `}</style>
 
-      {/* Header & Description */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-serif font-bold text-2xl sm:text-3xl text-zinc-900 tracking-tight">
-            Organização Semanal
-          </h2>
-          <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">
-            Planeje sua semana hora a hora e equilibre suas horas de trabalho, estudo e afazeres.
-          </p>
+      {/* Actions Toolbar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap no-print">
+        {/* Segmented Control Selector de Layout */}
+        <div className="bg-zinc-100 p-0.5 rounded-lg flex items-center border border-zinc-200 text-xs font-semibold shadow-3xs">
+          <button
+            onClick={() => setLayoutMode('agenda')}
+            className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+              layoutMode === 'agenda'
+                ? 'bg-white text-zinc-900 shadow-3xs font-bold font-sans'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+          >
+            Agenda (Sem rolagem)
+          </button>
+          <button
+            onClick={() => setLayoutMode('grade')}
+            className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
+              layoutMode === 'grade'
+                ? 'bg-white text-zinc-900 shadow-3xs font-bold font-sans'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+          >
+            Grade Semanal
+          </button>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-wrap no-print">
-          {/* Segmented Control Selector de Layout */}
-          <div className="bg-zinc-100 p-0.5 rounded-lg flex items-center border border-zinc-200 text-xs font-semibold mr-1 shadow-3xs">
-            <button
-              onClick={() => setLayoutMode('agenda')}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                layoutMode === 'agenda'
-                  ? 'bg-white text-zinc-900 shadow-3xs font-bold font-sans'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Agenda (Sem rolagem)
-            </button>
-            <button
-              onClick={() => setLayoutMode('grade')}
-              className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${
-                layoutMode === 'grade'
-                  ? 'bg-white text-zinc-900 shadow-3xs font-bold font-sans'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Grade Semanal
-            </button>
-          </div>
+        <div className="flex items-center gap-2 flex-wrap">
 
           <button
             onClick={handleClearAll}
