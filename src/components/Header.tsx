@@ -364,10 +364,8 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Hero Container */}
-      <div className="max-w-7xl 2xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
-        
-        {/* Unified Layout for Cronograma Tab (Pontos) */}
-        {activeTab === 'pontos' && (
+      {activeTab === 'pontos' && (
+        <div className="max-w-7xl 2xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
           <div className="w-full">
             {hojePonto ? (
               <div className="h-full bg-white border border-zinc-200/95 rounded-xl p-4 sm:p-5 shadow-3xs relative overflow-hidden transition-all hover:border-zinc-300 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -439,27 +437,8 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
           </div>
-        )}
-
-        {/* Standard Layout for other Tabs */}
-        {activeTab !== 'pontos' && (
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-2">
-            <div className="space-y-1.5">
-              <h1 className="font-serif font-bold text-3xl sm:text-4xl md:text-[2.75rem] text-zinc-900 tracking-tight leading-[1.1]">
-                {activeTab === 'organizacao_semanal' && 'Organização Semanal'}
-                {activeTab === 'foco' && 'Modo Foco & Estudo Líquido'}
-                {activeTab === 'revisao' && 'Radar de Revisão Ativa'}
-                {activeTab === 'editais' && 'Editais & Concursos'}
-                {activeTab === 'desempenho' && 'Desempenho & Estatísticas'}
-              </h1>
-              <p className="text-xs uppercase tracking-widest text-zinc-500 font-semibold font-mono">
-                {formattedTodayDate}
-              </p>
-            </div>
-          </div>
-        )}
-
-      </div>
+        </div>
+      )}
     </header>
   );
 };

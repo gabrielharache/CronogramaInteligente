@@ -109,14 +109,32 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
       }`}
     >
       <div className="flex items-start gap-3 sm:gap-4">
-        {/* Left Day Indicator: Seg 31/08 */}
+        {/* Left Day Indicator */}
         <div className="w-12 sm:w-14 shrink-0 text-left pt-0.5">
-          <div className="text-xs text-zinc-400 font-medium">
-            {dayInfo.weekday}
-          </div>
-          <div className="text-xs sm:text-sm font-mono font-bold text-zinc-800">
-            {dayInfo.dayMonth}
-          </div>
+          {ponto.data ? (
+            <>
+              <div className="text-xs text-zinc-400 font-medium">
+                {dayInfo.weekday}
+              </div>
+              <div className="text-xs sm:text-sm font-mono font-bold text-zinc-800">
+                {dayInfo.dayMonth}
+              </div>
+            </>
+          ) : (ponto.lido || ponto.qFeitas) ? (
+            <>
+              <div className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
+                Feito
+              </div>
+              <div className="text-xs font-mono font-bold text-emerald-700">
+                Concluído
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-xs text-zinc-400 font-medium">—</div>
+              <div className="text-xs sm:text-sm font-mono font-bold text-zinc-400">—</div>
+            </>
+          )}
         </div>
 
         {/* Custom Square Checkbox */}

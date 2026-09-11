@@ -32,7 +32,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   onApplyReorganize
 }) => {
   const [startDate, setStartDate] = useState<string>(hojeStr());
-  const [scope, setScope] = useState<'all' | 'pending'>('all');
+  const [scope, setScope] = useState<'pending' | 'all'>('pending');
   const [topicsPerDay, setTopicsPerDay] = useState<number>(1);
   const [studyDaysMode, setStudyDaysMode] = useState<'seg-sab' | 'seg-sex' | 'todos'>('seg-sab');
   
@@ -42,10 +42,21 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   const [materiaOrder, setMateriaOrder] = useState<string[]>([]);
   const [isQueueConfigOpen, setIsQueueConfigOpen] = useState<boolean>(false);
 
+  // Helper to check if a point was marked as completed
+  const isConcluido = (p: PontoEstudo) => Boolean(p.lido || (p.qFeitas && Number(p.qTotal) > 0));
+
+  const pendingPointsCount = useMemo(() => {
+    return pontos.filter(p => !isConcluido(p)).length;
+  }, [pontos]);
+
+  const completedPointsCount = useMemo(() => {
+    return pontos.filter(p => isConcluido(p)).length;
+  }, [pontos]);
+
   // Filter target points based on scope
   const targetPoints = useMemo(() => {
     if (scope === 'pending') {
-      return pontos.filter(p => !(p.lido && p.qFeitas));
+      return pontos.filter(p => !isConcluido(p));
     }
     return [...pontos];
   }, [pontos, scope]);
@@ -173,7 +184,22 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       updatedAt: Date.now()
     }));
 
-    onApplyReorganize(updatedPoints);
+    // CRITICAL: Preserve completed / non-rescheduled topics!
+    // As requested by user: "pode tirar do calendário, mas mantenha o tópico na aba de matérias"
+    // We clear their calendar date (data: '') so they are removed from the calendar,
+    // but keep them in the schedule state so they remain fully accessible in the materias tab!
+    const orderedIds = new Set(orderedPoints.map(p => p.id));
+    const omittedPoints = pontos
+      .filter(p => !orderedIds.has(p.id))
+      .map(p => ({
+        ...p,
+        data: '', // Remove from calendar, keep in materias tab
+        updatedAt: Date.now()
+      }));
+
+    const finalPoints = [...updatedPoints, ...omittedPoints];
+
+    onApplyReorganize(finalPoints);
     onClose();
   };
 
@@ -245,32 +271,47 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setScope('all')}
-                  className={`p-1.5 rounded-lg border text-center text-xs transition-all ${
-                    scope === 'all'
-                      ? 'bg-zinc-900 text-white border-zinc-900 font-medium shadow-2xs'
-                      : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
-                  }`}
-                >
-                  <div className="font-semibold text-[11px]">Tudo ({pontos.length})</div>
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => setScope('pending')}
-                  className={`p-1.5 rounded-lg border text-center text-xs transition-all ${
+                  className={`p-2 rounded-lg border text-center text-xs transition-all cursor-pointer ${
                     scope === 'pending'
                       ? 'bg-zinc-900 text-white border-zinc-900 font-medium shadow-2xs'
                       : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
                   }`}
                 >
                   <div className="font-semibold text-[11px]">
-                    Pendentes ({pontos.filter(p => !(p.lido && p.qFeitas)).length})
+                    Pendentes ({pendingPointsCount})
+                  </div>
+                  <div className={`text-[10px] mt-0.5 ${scope === 'pending' ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                    {completedPointsCount > 0 ? `${completedPointsCount} na aba Matérias` : 'Apenas não estudados'}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setScope('all')}
+                  className={`p-2 rounded-lg border text-center text-xs transition-all cursor-pointer ${
+                    scope === 'all'
+                      ? 'bg-zinc-900 text-white border-zinc-900 font-medium shadow-2xs'
+                      : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+                  }`}
+                >
+                  <div className="font-semibold text-[11px]">Todos ({pontos.length})</div>
+                  <div className={`text-[10px] mt-0.5 ${scope === 'all' ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                    Reagenda tudo no calendário
                   </div>
                 </button>
               </div>
             </div>
           </div>
+
+          {scope === 'pending' && completedPointsCount > 0 && (
+            <div className="p-2.5 bg-emerald-50/90 border border-emerald-200/90 rounded-lg text-xs text-emerald-800 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                <strong>{completedPointsCount} tópico(s) concluído(s)</strong> serão retirados do calendário e continuarão intactos na <strong>aba Matérias</strong> com todo o progresso e estatísticas preservados.
+              </span>
+            </div>
+          )}
 
           {/* 2. Rhythm and Days */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

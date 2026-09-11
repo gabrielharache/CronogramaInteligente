@@ -48,9 +48,15 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
   // Group filtered points by weekStart
   const groupedByWeek: Record<string, PontoEstudo[]> = {};
   (pontos || []).forEach(p => {
-    const ws = p.data ? getWeekStart(p.data) : 'sem-data';
-    if (!groupedByWeek[ws]) groupedByWeek[ws] = [];
-    groupedByWeek[ws].push(p);
+    if (p.data) {
+      const ws = getWeekStart(p.data);
+      if (!groupedByWeek[ws]) groupedByWeek[ws] = [];
+      groupedByWeek[ws].push(p);
+    } else if (!p.lido && !p.qFeitas) {
+      // Apenas tópicos pendentes sem data aparecem em "Sem data definida" no cronograma semanal
+      if (!groupedByWeek['sem-data']) groupedByWeek['sem-data'] = [];
+      groupedByWeek['sem-data'].push(p);
+    }
   });
 
   const sortedWeeks = Object.keys(groupedByWeek).sort();

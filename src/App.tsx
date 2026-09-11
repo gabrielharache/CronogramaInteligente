@@ -968,12 +968,40 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
       let nextPontos: PontoEstudo[];
 
       if (Array.isArray(reorgData)) {
-        // Remove old points of the active schedule, append the new ones in the exact sorted array sequence
+        const reorgMap = new Map(reorgData.map(p => [p.id, p]));
+
+        // Points belonging to other schedules
         const otherPoints = prev.pontos.filter(p => !(activeId === 'all' || p.cronogramaId === activeId));
-        nextPontos = [...otherPoints, ...reorgData];
+
+        // Existing points of active schedule
+        const currentActivePoints = activeId === 'all' 
+          ? prev.pontos 
+          : prev.pontos.filter(p => p.cronogramaId === activeId);
+
+        // Update existing points, ensuring NONE are ever lost
+        const updatedActivePoints = currentActivePoints.map(p => {
+          if (reorgMap.has(p.id)) {
+            return reorgMap.get(p.id)!;
+          }
+          // If point was omitted from reorgData (e.g. was already completed), keep it!
+          // Clear its calendar date if it's completed so it is taken off the calendar,
+          // but preserve the topic in state so it remains available in the materias tab.
+          const isDone = Boolean(p.lido || (p.qFeitas && Number(p.qTotal) > 0));
+          return {
+            ...p,
+            data: isDone ? '' : p.data,
+            updatedAt: Date.now()
+          };
+        });
+
+        // Any brand new points in reorgData that were not originally in currentActivePoints
+        const existingIds = new Set(currentActivePoints.map(p => p.id));
+        const brandNewPoints = reorgData.filter(p => !existingIds.has(p.id));
+
+        nextPontos = [...otherPoints, ...updatedActivePoints, ...brandNewPoints];
       } else if (reorgData && typeof reorgData === 'object') {
         nextPontos = prev.pontos.map(p => {
-          if ((activeId === 'all' || p.cronogramaId === activeId) && reorgData[p.id]) {
+          if ((activeId === 'all' || p.cronogramaId === activeId) && reorgData[p.id] !== undefined) {
             return {
               ...p,
               data: reorgData[p.id],
