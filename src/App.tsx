@@ -1597,6 +1597,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         onClose={() => setIsReorganizeModalOpen(false)}
         pontos={activeSchedulePoints}
         activeCronograma={activeCronogramaObj}
+        materiasCores={state.materiasCores}
         onApplyReorganize={handleApplyReorganize}
       />
 
