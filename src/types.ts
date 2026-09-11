@@ -28,6 +28,7 @@ export interface PontoEstudo {
   qAcertos: number | "";
   dif: Dificuldade;
   showNotes?: boolean;
+  ordem?: number; // Ordem lógica / sequência pedagógica no edital
   createdAt?: number;
   updatedAt?: number;
 }

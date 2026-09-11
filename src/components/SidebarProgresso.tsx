@@ -43,10 +43,14 @@ export const SidebarProgresso: React.FC<SidebarProgressoProps> = ({
   const strokeDashoffset = circumference - (percentual / 100) * circumference;
 
   const scrollToCurrentWeek = () => {
-    const el = document.querySelector('[id^="semana-"]');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    onViewModeChange('cronograma');
+    window.dispatchEvent(new CustomEvent('scroll-to-current-week'));
+    setTimeout(() => {
+      const el = document.querySelector('[data-current-week="true"]') || document.getElementById('semana-atual') || document.querySelector('[id^="semana-"]');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
   };
 
   const handleExpandAll = () => {

@@ -73,6 +73,17 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         }
         grouped[p.materia].push(p);
       });
+
+      // CRITICAL: Sort topics of each subject by logical ordem so they are scheduled in prerequisite sequence
+      Object.keys(grouped).forEach(mat => {
+        grouped[mat].sort((a, b) => {
+          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+          if (oA !== oB) return oA - oB;
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        });
+      });
+
       setPointsByMateria(grouped);
       setMateriaOrder(order);
     }
@@ -197,7 +208,40 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         updatedAt: Date.now()
       }));
 
-    const finalPoints = [...updatedPoints, ...omittedPoints];
+    // Reconstruct the exact, pristine logical order for each subject:
+    // Completed topics stay at their prerequisite positions at the beginning,
+    // followed by the pending topics in the exact order determined in pointsByMateria.
+    const updatedPointsMap = new Map(updatedPoints.map(p => [p.id, p]));
+    const omittedPointsMap = new Map(omittedPoints.map(p => [p.id, p]));
+
+    const finalPoints: PontoEstudo[] = [];
+    const subjectsInSchedule = Array.from(new Set(pontos.map(p => p.materia)));
+
+    subjectsInSchedule.forEach(materia => {
+      // Completed / omitted topics of this subject
+      const subjectOmitted = omittedPoints
+        .filter(p => p.materia === materia)
+        .sort((a, b) => {
+          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+          if (oA !== oB) return oA - oB;
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        });
+
+      // Scheduled topics of this subject in the user-adjusted queue order
+      const scheduledInQueue = (pointsByMateria[materia] || [])
+        .map(p => updatedPointsMap.get(p.id))
+        .filter((p): p is PontoEstudo => Boolean(p));
+
+      // Combine in logical progression: Completed prerequisites first, then scheduled topics
+      const combined = [...subjectOmitted, ...scheduledInQueue];
+      combined.forEach((p, idx) => {
+        finalPoints.push({
+          ...p,
+          ordem: idx + 1
+        });
+      });
+    });
 
     onApplyReorganize(finalPoints);
     onClose();

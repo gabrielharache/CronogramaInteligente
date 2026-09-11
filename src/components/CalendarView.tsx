@@ -74,7 +74,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setVisibleMonths(prev => Array.from(new Set([...prev, ...allAvailableMonths])).sort());
   }, [allAvailableMonths]);
 
-  // Points grouped by date
+  // Points grouped by date, ordered by logical ordem
   const pointsByDate = useMemo(() => {
     const map: Record<string, PontoEstudo[]> = {};
     (pontos || []).forEach(p => {
@@ -82,6 +82,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         if (!map[p.data]) map[p.data] = [];
         map[p.data].push(p);
       }
+    });
+    // Sort each day's points by logical ordem
+    Object.keys(map).forEach(date => {
+      map[date].sort((a, b) => {
+        const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+        const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+        if (oA !== oB) return oA - oB;
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      });
     });
     return map;
   }, [pontos]);

@@ -29,6 +29,7 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Shuffle,
   ListOrdered,
   FileCode,
@@ -91,6 +92,7 @@ export const EditalSmartImportModal: React.FC<EditalSmartImportModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<'estrutura' | 'planejamento'>('estrutura');
   const [searchTerm, setSearchTerm] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Initialize from hierarchy prop
   useEffect(() => {
@@ -294,9 +296,10 @@ export const EditalSmartImportModal: React.FC<EditalSmartImportModalProps> = ({
 
   const handleConfirm = () => {
     if (totalSelectedTopics === 0) {
-      alert('Por favor, selecione ao menos um tópico para gerar o cronograma.');
+      setValidationError('Por favor, selecione ao menos um tópico para gerar o cronograma.');
       return;
     }
+    setValidationError(null);
 
     onConfirmImport({
       edital: {
@@ -830,12 +833,21 @@ export const EditalSmartImportModal: React.FC<EditalSmartImportModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-t border-zinc-200 bg-zinc-50 shrink-0">
-          <div className="text-xs text-zinc-500">
-            <span className="font-bold text-zinc-900">{totalSelectedTopics}</span> tópicos em <span className="font-bold text-zinc-900">{totalSelectedSubjects}</span> matérias serão criados
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-zinc-200 bg-zinc-50 shrink-0">
+          <div className="text-xs text-zinc-500 w-full sm:w-auto">
+            {validationError ? (
+              <span className="text-rose-600 font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                {validationError}
+              </span>
+            ) : (
+              <span>
+                <span className="font-bold text-zinc-900">{totalSelectedTopics}</span> tópicos em <span className="font-bold text-zinc-900">{totalSelectedSubjects}</span> matérias serão criados
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               type="button"
               onClick={onClose}

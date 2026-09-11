@@ -414,7 +414,19 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
       }
 
       return true;
-    }).sort((a, b) => (a.data || '9999').localeCompare(b.data || '9999'));
+    }).sort((a, b) => {
+      if (a.data && b.data) {
+        if (a.data !== b.data) return a.data.localeCompare(b.data);
+        const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+        const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+        return oA - oB;
+      }
+      if (a.data && !b.data) return -1;
+      if (!a.data && b.data) return 1;
+      const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+      const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+      return oA - oB;
+    });
   }, [activeSchedulePoints, selectedMateria, tipoEstudoFilter, search, statusFilter, diffFilter]);
 
   // Active Cronograma Object
@@ -460,37 +472,53 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
   const handleMovePonto = useCallback((id: string, direction: 'up' | 'down') => {
     setState(prev => {
-      const targetIdx = prev.pontos.findIndex(p => p.id === id);
-      if (targetIdx === -1) return prev;
+      const targetPonto = prev.pontos.find(p => p.id === id);
+      if (!targetPonto) return prev;
 
-      const targetPonto = prev.pontos[targetIdx];
-      const matchCriteria = (p: PontoEstudo) => 
-        p.materia === targetPonto.materia && 
-        p.cronogramaId === targetPonto.cronogramaId;
+      // Find all points of the same materia and cronograma, sorted by logical ordem
+      const subjectPoints = prev.pontos
+        .filter(p => p.materia === targetPonto.materia && p.cronogramaId === targetPonto.cronogramaId)
+        .sort((a, b) => {
+          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+          if (oA !== oB) return oA - oB;
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        });
 
-      const matchingIndices: number[] = [];
-      prev.pontos.forEach((p, idx) => {
-        if (matchCriteria(p)) {
-          matchingIndices.push(idx);
-        }
-      });
+      const position = subjectPoints.findIndex(p => p.id === id);
+      if (position === -1) return prev;
 
-      const positionInMatch = matchingIndices.indexOf(targetIdx);
-      if (positionInMatch === -1) return prev;
-
-      let swapWithIdx = -1;
-      if (direction === 'up' && positionInMatch > 0) {
-        swapWithIdx = matchingIndices[positionInMatch - 1];
-      } else if (direction === 'down' && positionInMatch < matchingIndices.length - 1) {
-        swapWithIdx = matchingIndices[positionInMatch + 1];
+      let swapWithPos = -1;
+      if (direction === 'up' && position > 0) {
+        swapWithPos = position - 1;
+      } else if (direction === 'down' && position < subjectPoints.length - 1) {
+        swapWithPos = position + 1;
       }
 
-      if (swapWithIdx === -1) return prev;
+      if (swapWithPos === -1) return prev;
 
-      const nextPontos = [...prev.pontos];
-      const temp = nextPontos[targetIdx];
-      nextPontos[targetIdx] = nextPontos[swapWithIdx];
-      nextPontos[swapWithIdx] = temp;
+      // Swap their positions
+      const reordered = [...subjectPoints];
+      const temp = reordered[position];
+      reordered[position] = reordered[swapWithPos];
+      reordered[swapWithPos] = temp;
+
+      // Reassign clean sequence ordems: 1, 2, 3...
+      const ordemMap = new Map<string, number>();
+      reordered.forEach((p, index) => {
+        ordemMap.set(p.id, index + 1);
+      });
+
+      const nextPontos = prev.pontos.map(p => {
+        if (ordemMap.has(p.id)) {
+          return {
+            ...p,
+            ordem: ordemMap.get(p.id)!,
+            updatedAt: Date.now()
+          };
+        }
+        return p;
+      });
 
       return {
         ...prev,
@@ -541,10 +569,14 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         });
         return { ...prev, pontos: nextPontos, materiasCores: updatedColors };
       } else {
-        // Add new
+        // Add new, calculating next sequential logical ordem in this subject
+        const targetCronId = assignedCronogramaId;
+        const subjectPoints = prev.pontos.filter(p => p.materia === data.materia && p.cronogramaId === targetCronId);
+        const maxOrdem = subjectPoints.reduce((max, p) => Math.max(max, typeof p.ordem === 'number' ? p.ordem : 0), 0);
+
         const newPonto: PontoEstudo = {
           id: uid(),
-          cronogramaId: assignedCronogramaId,
+          cronogramaId: targetCronId,
           titulo: data.titulo,
           materia: data.materia,
           tipoEstudo: data.tipoEstudo,
@@ -558,6 +590,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
           qAcertos: '',
           dif: null,
           showNotes: Boolean(data.notas),
+          ordem: maxOrdem + 1,
           createdAt: Date.now(),
           updatedAt: Date.now()
         };
@@ -571,22 +604,29 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   }, []);
 
   const handleDuplicatePonto = useCallback((ponto: PontoEstudo) => {
-    const duplicated: PontoEstudo = {
-      ...ponto,
-      id: uid(),
-      titulo: `${ponto.titulo} (Revisão)`,
-      data: ponto.data ? addDays(ponto.data, 7) : ponto.data,
-      lido: false,
-      qFeitas: false,
-      qTotal: '',
-      qAcertos: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    setState(prev => ({
-      ...prev,
-      pontos: [...prev.pontos, duplicated]
-    }));
+    setState(prev => {
+      const subjectPoints = prev.pontos.filter(p => p.materia === ponto.materia && p.cronogramaId === ponto.cronogramaId);
+      const maxOrdem = subjectPoints.reduce((max, p) => Math.max(max, typeof p.ordem === 'number' ? p.ordem : 0), 0);
+
+      const duplicated: PontoEstudo = {
+        ...ponto,
+        id: uid(),
+        titulo: `${ponto.titulo} (Revisão)`,
+        data: ponto.data ? addDays(ponto.data, 7) : ponto.data,
+        lido: false,
+        qFeitas: false,
+        qTotal: '',
+        qAcertos: '',
+        dif: 'medio',
+        ordem: maxOrdem + 1,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      return {
+        ...prev,
+        pontos: [...prev.pontos, duplicated]
+      };
+    });
   }, []);
 
   const handleMovePontoDate = useCallback((pontoId: string, newDate: string) => {
@@ -708,25 +748,31 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
       createdAt: Date.now()
     };
 
-    const newPontos: PontoEstudo[] = payload.studyPlan.map((p, idx) => ({
-      id: uid() + idx + Math.random().toString(36).slice(2, 6),
-      cronogramaId: newCroId,
-      data: p.data,
-      materia: p.materia,
-      titulo: p.titulo,
-      tipoEstudo: p.tipoEstudo,
-      artigosLei: p.artigosLei || '',
-      jurisprudenciaRef: p.jurisprudenciaRef || '',
-      notas: p.notas || '',
-      lido: false,
-      qFeitas: false,
-      qTotal: '',
-      qAcertos: '',
-      dif: null,
-      showNotes: Boolean(p.notas),
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    }));
+    // Group by materia to assign sequential logical sequence (ordem: 1, 2, 3...)
+    const subjectOrderCounts: Record<string, number> = {};
+    const newPontos: PontoEstudo[] = payload.studyPlan.map((p, idx) => {
+      subjectOrderCounts[p.materia] = (subjectOrderCounts[p.materia] || 0) + 1;
+      return {
+        id: uid() + idx + Math.random().toString(36).slice(2, 6),
+        cronogramaId: newCroId,
+        data: p.data,
+        materia: p.materia,
+        titulo: p.titulo,
+        tipoEstudo: p.tipoEstudo,
+        artigosLei: p.artigosLei || '',
+        jurisprudenciaRef: p.jurisprudenciaRef || '',
+        notas: p.notas || '',
+        lido: false,
+        qFeitas: false,
+        qTotal: '',
+        qAcertos: '',
+        dif: null,
+        showNotes: Boolean(p.notas),
+        ordem: subjectOrderCounts[p.materia],
+        createdAt: Date.now() + idx,
+        updatedAt: Date.now() + idx
+      };
+    });
 
     setState(prev => {
       const nextColors = { ...prev.materiasCores };
@@ -791,25 +837,31 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         studyDaysMode: 'seg-sab'
       });
 
-      newPontoItems = parsedPoints.map((p, idx) => ({
-        id: uid() + idx,
-        cronogramaId: newCroId,
-        data: p.data || dates[idx] || hojeStr(),
-        materia: p.materia || 'Geral',
-        titulo: p.titulo,
-        tipoEstudo: p.tipoEstudo || 'doutrina',
-        artigosLei: p.artigosLei || '',
-        jurisprudenciaRef: p.jurisprudenciaRef || '',
-        notas: p.notas || '',
-        lido: false,
-        qFeitas: false,
-        qTotal: '',
-        qAcertos: '',
-        dif: null,
-        showNotes: Boolean(p.notas),
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      }));
+      const subjectOrderCounts: Record<string, number> = {};
+      newPontoItems = parsedPoints.map((p, idx) => {
+        const mat = p.materia || 'Geral';
+        subjectOrderCounts[mat] = (subjectOrderCounts[mat] || 0) + 1;
+        return {
+          id: uid() + idx,
+          cronogramaId: newCroId,
+          data: p.data || dates[idx] || hojeStr(),
+          materia: mat,
+          titulo: p.titulo,
+          tipoEstudo: p.tipoEstudo || 'doutrina',
+          artigosLei: p.artigosLei || '',
+          jurisprudenciaRef: p.jurisprudenciaRef || '',
+          notas: p.notas || '',
+          lido: false,
+          qFeitas: false,
+          qTotal: '',
+          qAcertos: '',
+          dif: null,
+          showNotes: Boolean(p.notas),
+          ordem: subjectOrderCounts[mat],
+          createdAt: Date.now() + idx,
+          updatedAt: Date.now() + idx
+        };
+      });
     }
 
     setState(prev => {
@@ -998,7 +1050,17 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         const existingIds = new Set(currentActivePoints.map(p => p.id));
         const brandNewPoints = reorgData.filter(p => !existingIds.has(p.id));
 
-        nextPontos = [...otherPoints, ...updatedActivePoints, ...brandNewPoints];
+        const allActive = [...updatedActivePoints, ...brandNewPoints];
+        // Sort active points strictly by logical ordem within each subject
+        allActive.sort((a, b) => {
+          if (a.materia !== b.materia) return a.materia.localeCompare(b.materia);
+          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+          if (oA !== oB) return oA - oB;
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        });
+
+        nextPontos = [...otherPoints, ...allActive];
       } else if (reorgData && typeof reorgData === 'object') {
         nextPontos = prev.pontos.map(p => {
           if ((activeId === 'all' || p.cronogramaId === activeId) && reorgData[p.id] !== undefined) {

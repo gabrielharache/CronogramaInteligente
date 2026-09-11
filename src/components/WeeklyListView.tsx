@@ -91,13 +91,28 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
       setOpenWeeks(allClosed);
     };
 
+    const handleScrollToCurrentWeek = () => {
+      setOpenWeeks(prev => ({
+        ...prev,
+        [currentWeekStart]: true
+      }));
+      setTimeout(() => {
+        const el = document.querySelector('[data-current-week="true"]') || document.getElementById('semana-atual');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 50);
+    };
+
     window.addEventListener('expand-all-weeks', handleExpandAll);
     window.addEventListener('collapse-all-weeks', handleCollapseAll);
+    window.addEventListener('scroll-to-current-week', handleScrollToCurrentWeek);
     return () => {
       window.removeEventListener('expand-all-weeks', handleExpandAll);
       window.removeEventListener('collapse-all-weeks', handleCollapseAll);
+      window.removeEventListener('scroll-to-current-week', handleScrollToCurrentWeek);
     };
-  }, [sortedWeeks]);
+  }, [sortedWeeks, currentWeekStart]);
 
   if (pontos.length === 0) {
     return (
@@ -125,7 +140,13 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
   return (
     <div className="space-y-4">
       {sortedWeeks.map(weekStart => {
-        const weekPoints = groupedByWeek[weekStart] || [];
+        const weekPoints = [...(groupedByWeek[weekStart] || [])].sort((a, b) => {
+          if (a.data && b.data && a.data !== b.data) return a.data.localeCompare(b.data);
+          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+          if (oA !== oB) return oA - oB;
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        });
         const isOpen = openWeeks[weekStart] ?? true;
         const weekNum = weekNumberMap[weekStart] || 1;
         const isCurrentWeek = weekStart === currentWeekStart;
@@ -137,8 +158,12 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
         return (
           <div 
             key={weekStart}
-            id={`semana-${weekNum}`}
-            className="bg-white border border-zinc-200/90 rounded-md overflow-hidden transition-all shadow-2xs"
+            id={isCurrentWeek ? 'semana-atual' : `semana-${weekNum}`}
+            data-current-week={isCurrentWeek ? 'true' : undefined}
+            data-week-num={weekNum}
+            className={`bg-white border rounded-md overflow-hidden transition-all shadow-2xs ${
+              isCurrentWeek ? 'border-zinc-400 ring-1 ring-zinc-300' : 'border-zinc-200/90'
+            }`}
           >
             {/* Accordion Header */}
             <div 

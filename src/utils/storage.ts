@@ -213,6 +213,7 @@ export function getInitialState(): AppState {
       qAcertos: isFirstCompleted ? 30 : '',
       dif: null,
       showNotes: false,
+      ordem: index + 1,
       createdAt: Date.now() + index,
       updatedAt: Date.now() + index
     };
@@ -259,7 +260,42 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
 
   const activeCronogramaId = parsed.activeCronogramaId || cronogramas[0]?.id || 'all';
 
-  const migratedPontos: PontoEstudo[] = parsed.pontos.map((p: any) => ({
+  // Group by materia and cronograma to safely calculate or assign missing `ordem`
+  const pointsByGroup: Record<string, any[]> = {};
+  parsed.pontos.forEach((p: any, idx: number) => {
+    const key = `${p.cronogramaId || 'default'}_${p.materia || 'Geral'}`;
+    if (!pointsByGroup[key]) pointsByGroup[key] = [];
+    pointsByGroup[key].push({ p, originalIdx: idx });
+  });
+
+  const calculatedOrdemMap = new Map<any, number>();
+  Object.values(pointsByGroup).forEach(group => {
+    // If points already have valid numbers in `ordem`, respect them
+    const allHaveOrdem = group.every(item => typeof item.p.ordem === 'number' && !isNaN(item.p.ordem));
+    if (allHaveOrdem) {
+      group.forEach(item => {
+        calculatedOrdemMap.set(item.p, item.p.ordem);
+      });
+    } else {
+      // Sort by existing `createdAt` or original index to restore original pedagogical sequence
+      const sorted = [...group].sort((a, b) => {
+        if (typeof a.p.ordem === 'number' && typeof b.p.ordem === 'number') {
+          return a.p.ordem - b.p.ordem;
+        }
+        if (typeof a.p.ordem === 'number') return -1;
+        if (typeof b.p.ordem === 'number') return 1;
+        const cA = a.p.createdAt || 0;
+        const cB = b.p.createdAt || 0;
+        if (cA !== cB) return cA - cB;
+        return a.originalIdx - b.originalIdx;
+      });
+      sorted.forEach((item, seq) => {
+        calculatedOrdemMap.set(item.p, seq + 1);
+      });
+    }
+  });
+
+  const migratedPontos: PontoEstudo[] = parsed.pontos.map((p: any, idx: number) => ({
     id: p.id || uid(),
     cronogramaId: p.cronogramaId || cronogramas[0]?.id || 'cronograma-principal',
     data: p.data || '',
@@ -275,6 +311,7 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
     qAcertos: p.qAcertos ?? '',
     dif: p.dif || null,
     showNotes: Boolean(p.showNotes),
+    ordem: calculatedOrdemMap.get(p) ?? (idx + 1),
     createdAt: p.createdAt || Date.now(),
     updatedAt: p.updatedAt || Date.now()
   }));

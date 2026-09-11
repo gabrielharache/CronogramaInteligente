@@ -162,6 +162,16 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
               {ponto.materia}
             </span>
 
+            {/* Logical order within the subject */}
+            {typeof ponto.ordem === 'number' && (
+              <span 
+                className="inline-flex items-center text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 border border-zinc-200"
+                title={`Ordem lógica no edital: Tópico #${ponto.ordem}`}
+              >
+                #{ponto.ordem}
+              </span>
+            )}
+
             {/* Optional Type Badge if Lei Seca or Jurisprudência */}
             {ponto.tipoEstudo === 'lei_seca' && (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">

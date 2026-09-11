@@ -18,7 +18,9 @@ import {
   Award,
   ChevronDown,
   Scale,
-  Landmark
+  Landmark,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { hojeStr, formatarDataBr } from '../utils/helpers';
@@ -96,6 +98,7 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
   const [isZenMode, setIsZenMode] = useState<boolean>(false);
   const [selectedTipoEstudo, setSelectedTipoEstudo] = useState<TipoEstudo | undefined>(undefined);
+  const [showShortSessionModal, setShowShortSessionModal] = useState<boolean>(false);
 
   // Play pleasant chime with Web Audio API
   const playChime = () => {
@@ -133,15 +136,25 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
     }
   };
 
+  // Determine current active mode and target time (reactive to preset button / minutes changes even before starting)
+  const isTimerFresh = !activeTimer.isRunning && activeTimer.secondsElapsed === 0;
+  const currentMode = isTimerFresh ? timerMode : activeTimer.mode;
+  const currentTargetSeconds = isTimerFresh 
+    ? (timerMode === 'pomodoro' ? pomodoroMinutes * 60 : 0)
+    : activeTimer.targetSeconds;
+
   // Time calculations
   const displaySeconds = useMemo(() => {
+    if (isTimerFresh) {
+      return currentMode === 'cronometro' ? 0 : currentTargetSeconds;
+    }
     if (activeTimer.mode === 'cronometro') {
       return activeTimer.secondsElapsed;
     } else {
       // Countdown
       return Math.max(0, activeTimer.targetSeconds - activeTimer.secondsElapsed);
     }
-  }, [activeTimer.mode, activeTimer.secondsElapsed, activeTimer.targetSeconds]);
+  }, [isTimerFresh, currentMode, currentTargetSeconds, activeTimer.mode, activeTimer.secondsElapsed, activeTimer.targetSeconds]);
 
   // Format seconds to HH:MM:SS
   const formatTime = (totalSec: number) => {
@@ -156,9 +169,10 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
 
   // Progress percentage
   const progressPct = useMemo(() => {
+    if (isTimerFresh) return 0;
     if (activeTimer.targetSeconds <= 0) return 0;
     return Math.min(100, Math.round((activeTimer.secondsElapsed / activeTimer.targetSeconds) * 100));
-  }, [activeTimer.secondsElapsed, activeTimer.targetSeconds]);
+  }, [isTimerFresh, activeTimer.secondsElapsed, activeTimer.targetSeconds]);
 
   // Check completion of countdown timer
   useEffect(() => {
@@ -191,16 +205,9 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
     });
   };
 
-  // Handle Finish and Save study session
-  const handleFinishAndSave = () => {
+  // Execute save session logic
+  const executeSaveSession = () => {
     const duracaoLiquida = activeTimer.secondsElapsed;
-    if (duracaoLiquida < 30) {
-      if (!confirm('Esta sessão durou menos de 30 segundos. Deseja registrar mesmo assim?')) {
-        onResetTimer();
-        return;
-      }
-    }
-
     const agora = Date.now();
     const finalMateria = activeTimer.materia || selectedMateria;
     const finalAssunto = activeTimer.assunto || customAssunto || 'Estudo Focado';
@@ -228,6 +235,16 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
         origin: { y: 0.7 }
       });
     } catch (_) {}
+  };
+
+  // Handle Finish and Save study session
+  const handleFinishAndSave = () => {
+    const duracaoLiquida = activeTimer.secondsElapsed;
+    if (duracaoLiquida < 30) {
+      setShowShortSessionModal(true);
+      return;
+    }
+    executeSaveSession();
   };
 
   // Today stats
@@ -377,7 +394,7 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
                   strokeWidth="10"
                   fill="none"
                   strokeDasharray={653}
-                  strokeDashoffset={653 - (653 * (activeTimer.mode === 'cronometro' ? Math.min(100, (activeTimer.secondsElapsed % 3600) / 36) : progressPct)) / 100}
+                  strokeDashoffset={653 - (653 * (currentMode === 'cronometro' ? Math.min(100, (activeTimer.secondsElapsed % 3600) / 36) : progressPct)) / 100}
                   strokeLinecap="round"
                   className="transition-all duration-300"
                 />
@@ -394,12 +411,12 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
                 <span className={`text-[11px] font-mono uppercase tracking-widest mt-1 ${
                   isZenMode ? 'text-zinc-400' : 'text-zinc-500'
                 }`}>
-                  {activeTimer.mode === 'cronometro' ? 'Tempo Líquido' : 'Tempo Restante'}
+                  {currentMode === 'cronometro' ? 'Tempo Líquido' : 'Tempo Restante'}
                 </span>
 
-                {activeTimer.mode === 'pomodoro' && activeTimer.targetSeconds > 0 && (
+                {currentMode === 'pomodoro' && currentTargetSeconds > 0 && (
                   <span className={`text-[10px] font-mono mt-0.5 ${isZenMode ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                    Meta: {Math.round(activeTimer.targetSeconds / 60)} min ({progressPct}%)
+                    Meta: {Math.round(currentTargetSeconds / 60)} min {!isTimerFresh ? `(${progressPct}%)` : ''}
                   </span>
                 )}
               </div>
@@ -848,6 +865,55 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Confirmação de Sessão Curta (< 30s) */}
+      {showShortSessionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-md w-full p-6 text-zinc-900 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <button
+                onClick={() => setShowShortSessionModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <h3 className="text-base font-bold text-zinc-900 mb-1">
+              Sessão Curta de Estudo
+            </h3>
+            <p className="text-xs text-zinc-600 leading-relaxed mb-6">
+              Esta sessão durou apenas <span className="font-mono font-bold text-zinc-900">{activeTimer.secondsElapsed} segundos</span> (menos de 30 segundos). Deseja registrá-la no seu histórico de horas líquidas ou prefere descartar?
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowShortSessionModal(false);
+                  onResetTimer();
+                }}
+                className="px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Descartar Sessão
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowShortSessionModal(false);
+                  executeSaveSession();
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-zinc-900 hover:bg-black rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                Registrar Mesmo Assim
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

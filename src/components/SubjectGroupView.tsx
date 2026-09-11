@@ -51,7 +51,15 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
   return (
     <div className="space-y-4">
       {subjectNames.map(materia => {
-        const items = grouped[materia];
+        // Maintain strict logical order of topics within each subject,
+        // regardless of whether they have dates, are completed, or have been reorganized
+        const rawItems = grouped[materia] || [];
+        const items = [...rawItems].sort((a, b) => {
+          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
+          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
+          if (oA !== oB) return oA - oB;
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        });
         const color = materiasCores[materia] || '#3F3F46';
         const isCollapsed = Boolean(collapsed[materia]);
 

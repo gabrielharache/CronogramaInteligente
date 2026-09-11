@@ -182,19 +182,21 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
       totalAcertosGeral += acertosLimpos;
     }
 
-    // Flag for revision: difAuto difícil (<=45%) or médio (46-69%)
-    if (difAuto === 'dificil') {
-      pontosParaRevisao.push({ 
-        ponto: p, 
-        motivo: pct !== null ? `Difícil (${pct}% — ≤ 45%)` : 'Classificado como Difícil', 
-        pct 
-      });
-    } else if (difAuto === 'medio' && pct !== null) {
-      pontosParaRevisao.push({ 
-        ponto: p, 
-        motivo: `Médio (${pct}% — 46% a 69%)`, 
-        pct 
-      });
+    // Flag for revision: only studied (lido) points with difAuto difícil (<=45%) or médio (46-69%)
+    if (p.lido) {
+      if (difAuto === 'dificil') {
+        pontosParaRevisao.push({ 
+          ponto: p, 
+          motivo: pct !== null ? `Difícil (${pct}% — ≤ 45%)` : 'Classificado como Difícil', 
+          pct 
+        });
+      } else if (difAuto === 'medio' && pct !== null) {
+        pontosParaRevisao.push({ 
+          ponto: p, 
+          motivo: `Médio (${pct}% — 46% a 69%)`, 
+          pct 
+        });
+      }
     }
   });
 

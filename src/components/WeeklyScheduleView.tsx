@@ -17,7 +17,8 @@ import {
   Info,
   Printer,
   Scale,
-  Landmark
+  Landmark,
+  AlertCircle
 } from 'lucide-react';
 import { uid } from '../utils/helpers';
 import { PontoEstudo } from '../types';
@@ -92,17 +93,14 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
       ? rawGradeSemanal 
       : (Array.isArray(rawGrade) ? rawGrade : []);
   }, [rawGradeSemanal, rawGrade]);
-  // Config for hours to display: 24h, starting from 01:00 to 00:00 (represented by hour 0 at the end)
-  const [startHour] = useState(1);
-  const [endHour] = useState(24); // inclusive
-
-  // Active day filter for mobile / focus
+  // Config for hours to display: 24h, starting from 00:00 to 23:00 in chronological order
   const [selectedDayTab, setSelectedDayTab] = useState<number | 'todos'>('todos');
   const [layoutMode, setLayoutMode] = useState<'agenda' | 'grade'>('grade');
 
   // Modal / form state for adding/editing a block
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<BlocoHorario | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   
   // Form fields
   const [formDia, setFormDia] = useState<number>(1);
@@ -120,11 +118,11 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
 
   const hoursRange = useMemo(() => {
     const hours: number[] = [];
-    for (let h = startHour; h <= endHour; h++) {
-      hours.push(h === 24 ? 0 : h);
+    for (let h = 0; h <= 23; h++) {
+      hours.push(h);
     }
     return hours;
-  }, [startHour, endHour]);
+  }, []);
 
   // Aggregate totals
   const stats = useMemo(() => {
@@ -168,6 +166,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
     setFormNotas('');
     setFormPontoId('');
     setFormTipoEstudo(undefined);
+    setFormError(null);
     setIsModalOpen(true);
   };
 
@@ -183,6 +182,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
     setFormNotas(block.notas || '');
     setFormPontoId(block.pontoId || '');
     setFormTipoEstudo(block.tipoEstudo);
+    setFormError(null);
     setIsModalOpen(true);
   };
 
@@ -190,9 +190,10 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
   const handleSaveBlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (formHoraFim <= formHoraInicio) {
-      alert('O horário de término deve ser posterior ao horário de início.');
+      setFormError('O horário de término deve ser posterior ao horário de início.');
       return;
     }
+    setFormError(null);
 
     const titleToUse = formTitulo.trim() || 
       (formCategoria === 'estudo' && formMateria ? formMateria : CATEGORIAS_CONFIG[formCategoria].defaultTitle);
@@ -953,6 +954,13 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveBlock} className="space-y-4 text-xs">
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               {/* Categoria Selector */}
               <div>
                 <label className="block font-bold text-zinc-700 mb-1.5">
@@ -1010,7 +1018,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                     onChange={(e) => setFormHoraInicio(parseInt(e.target.value, 10))}
                     className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-xs font-mono font-medium focus:ring-2 focus:ring-zinc-900 focus:outline-none"
                   >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0].map((i) => (
+                    {Array.from({ length: 24 }, (_, i) => i).map((i) => (
                       <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
                     ))}
                   </select>
@@ -1025,10 +1033,13 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                     onChange={(e) => setFormHoraFim(parseInt(e.target.value, 10))}
                     className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-xs font-mono font-medium focus:ring-2 focus:ring-zinc-900 focus:outline-none"
                   >
-                    {Array.from({ length: 25 }).map((_, i) => {
+                    {Array.from({ length: 25 }, (_, i) => i).map((i) => {
                       if (i <= formHoraInicio) return null;
-                      const displayHour = i === 24 ? 0 : i;
-                      return <option key={i} value={i}>{String(displayHour).padStart(2, '0')}:00</option>;
+                      return (
+                        <option key={i} value={i}>
+                          {i === 24 ? '24:00 (Fim do dia)' : `${String(i).padStart(2, '0')}:00`}
+                        </option>
+                      );
                     })}
                   </select>
                 </div>
