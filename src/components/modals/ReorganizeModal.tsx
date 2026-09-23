@@ -5,7 +5,10 @@ import {
   calculateSmartSchedule, 
   MateriaFrequencyMode, 
   MateriaReorgConfig, 
-  ScheduledWeekSummary 
+  ScheduledWeekSummary,
+  ReorganizePreset,
+  loadReorganizePresets,
+  saveReorganizePresetsToStorage
 } from '../../utils/scheduleReorganizer';
 import { 
   X, 
@@ -28,7 +31,12 @@ import {
   Info,
   ChevronLeft,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  Bookmark,
+  BookmarkPlus,
+  Save,
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 
 interface ReorganizeModalProps {
@@ -78,6 +86,30 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   const [selectedPreviewWeek, setSelectedPreviewWeek] = useState<number>(1);
   const [previewViewMode, setPreviewViewMode] = useState<'semanal' | 'lista'>('semanal');
   const [editingDaysMateria, setEditingDaysMateria] = useState<string | null>(null);
+
+  // Presets State Management
+  const [presets, setPresets] = useState<ReorganizePreset[]>(() => loadReorganizePresets());
+  const [activePresetId, setActivePresetId] = useState<string>('builtin_concurseiro');
+  const [isPresetModified, setIsPresetModified] = useState<boolean>(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
+
+  // Modals for Presets
+  const [saveModalOpen, setSaveModalOpen] = useState<boolean>(false);
+  const [savePresetName, setSavePresetName] = useState<string>('');
+  const [savePresetDesc, setSavePresetDesc] = useState<string>('');
+  const [presetToDelete, setPresetToDelete] = useState<ReorganizePreset | null>(null);
+  const [manageModalOpen, setManageModalOpen] = useState<boolean>(false);
+
+  const activePreset = useMemo(() => {
+    return presets.find(p => p.id === activePresetId) || presets[0];
+  }, [presets, activePresetId]);
+
+  const showFeedback = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
+    setFeedbackMsg({ type, text });
+    setTimeout(() => {
+      setFeedbackMsg(null);
+    }, 3500);
+  };
 
   // Helper to check if a point is marked completed
   const isConcluido = (p: PontoEstudo) => Boolean(p.lido || (p.qFeitas && Number(p.qTotal) > 0));
@@ -160,62 +192,224 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   }, [isOpen, targetPoints]);
 
   // Presets Handlers
-  const handleApplyPreset = (presetType: 'concurseiro' | 'uniforme' | 'intensivo') => {
-    const updatedConfigs: Record<string, MateriaReorgConfig> = {};
-    const sortedByCount = [...materiaOrder].sort(
-      (a, b) => (pointsByMateria[b]?.length || 0) - (pointsByMateria[a]?.length || 0)
-    );
+  const handleSelectPreset = (preset: ReorganizePreset) => {
+    setActivePresetId(preset.id);
+    setIsPresetModified(false);
 
-    if (presetType === 'concurseiro') {
-      // 2 or 3 largest subjects Toda Semana, rest Intercaladas A/B
-      const todaSemanaCount = Math.max(1, Math.min(3, Math.ceil(materiaOrder.length / 2)));
-      let interCount = 0;
+    setDistributionMode(preset.distributionMode);
+    setTopicsPerDay(preset.topicsPerDay);
+    setStudyDaysMode(preset.studyDaysMode);
+    if (preset.customDays && preset.customDays.length > 0) {
+      setCustomDays(preset.customDays);
+    }
+    setAvoidSameSubjectPerDay(preset.avoidSameSubjectPerDay !== false);
 
-      sortedByCount.forEach((mat, idx) => {
-        if (idx < todaSemanaCount) {
-          updatedConfigs[mat] = {
-            materia: mat,
-            frequencia: 'toda_semana'
-          };
-        } else {
-          updatedConfigs[mat] = {
-            materia: mat,
-            frequencia: 'intercalada',
-            grupoIntercalacao: interCount % 2 === 0 ? 'A' : 'B'
-          };
-          interCount++;
-        }
-      });
-      setDistributionMode('smart_cycle');
-    } else if (presetType === 'uniforme') {
-      // All normal cycle
+    if (preset.isBuiltIn) {
+      // Dynamic generation based on built-in rules
+      if (preset.id === 'builtin_concurseiro') {
+        const updatedConfigs: Record<string, MateriaReorgConfig> = {};
+        const sortedByCount = [...materiaOrder].sort(
+          (a, b) => (pointsByMateria[b]?.length || 0) - (pointsByMateria[a]?.length || 0)
+        );
+        const todaSemanaCount = Math.max(1, Math.min(3, Math.ceil(materiaOrder.length / 2)));
+        let interCount = 0;
+        sortedByCount.forEach((mat, idx) => {
+          if (idx < todaSemanaCount) {
+            updatedConfigs[mat] = { materia: mat, frequencia: 'toda_semana' };
+          } else {
+            updatedConfigs[mat] = {
+              materia: mat,
+              frequencia: 'intercalada',
+              grupoIntercalacao: interCount % 2 === 0 ? 'A' : 'B'
+            };
+            interCount++;
+          }
+        });
+        setMateriaConfigs(updatedConfigs);
+      } else if (preset.id === 'builtin_uniforme') {
+        const updatedConfigs: Record<string, MateriaReorgConfig> = {};
+        materiaOrder.forEach(mat => {
+          updatedConfigs[mat] = { materia: mat, frequencia: 'padrao' };
+        });
+        setMateriaConfigs(updatedConfigs);
+      } else if (preset.id === 'builtin_intensivo') {
+        const updatedConfigs: Record<string, MateriaReorgConfig> = {};
+        const sortedByCount = [...materiaOrder].sort(
+          (a, b) => (pointsByMateria[b]?.length || 0) - (pointsByMateria[a]?.length || 0)
+        );
+        sortedByCount.forEach((mat, idx) => {
+          if (idx < 2) {
+            updatedConfigs[mat] = { materia: mat, frequencia: 'duas_vezes' };
+          } else {
+            updatedConfigs[mat] = { materia: mat, frequencia: 'toda_semana' };
+          }
+        });
+        setMateriaConfigs(updatedConfigs);
+      } else if (preset.id === 'builtin_sequencial') {
+        const updatedConfigs: Record<string, MateriaReorgConfig> = {};
+        materiaOrder.forEach(mat => {
+          updatedConfigs[mat] = { materia: mat, frequencia: 'bloco' };
+        });
+        setMateriaConfigs(updatedConfigs);
+      }
+    } else {
+      // Custom user preset
+      const updatedConfigs: Record<string, MateriaReorgConfig> = {};
       materiaOrder.forEach(mat => {
-        updatedConfigs[mat] = {
-          materia: mat,
-          frequencia: 'padrao'
-        };
-      });
-      setDistributionMode('smart_cycle');
-    } else if (presetType === 'intensivo') {
-      // Priority subjects 2x per week, rest toda semana
-      sortedByCount.forEach((mat, idx) => {
-        if (idx < 2) {
-          updatedConfigs[mat] = {
-            materia: mat,
-            frequencia: 'duas_vezes'
-          };
+        if (preset.materiaConfigs && preset.materiaConfigs[mat]) {
+          updatedConfigs[mat] = { ...preset.materiaConfigs[mat] };
         } else {
           updatedConfigs[mat] = {
             materia: mat,
-            frequencia: 'toda_semana'
+            frequencia: preset.distributionMode === 'sequential' ? 'bloco' : 'padrao'
           };
         }
       });
-      setDistributionMode('smart_cycle');
-      setTopicsPerDay(2);
+      setMateriaConfigs(updatedConfigs);
+
+      if (preset.materiaOrder && preset.materiaOrder.length > 0) {
+        const reordered: string[] = [];
+        preset.materiaOrder.forEach(mat => {
+          if (materiaOrder.includes(mat)) {
+            reordered.push(mat);
+          }
+        });
+        materiaOrder.forEach(mat => {
+          if (!reordered.includes(mat)) {
+            reordered.push(mat);
+          }
+        });
+        setMateriaOrder(reordered);
+      }
     }
 
-    setMateriaConfigs(updatedConfigs);
+    showFeedback(`Preset "${preset.nome}" aplicado com sucesso!`, 'info');
+  };
+
+  const handleApplyPreset = (presetType: 'concurseiro' | 'uniforme' | 'intensivo') => {
+    const found = presets.find(p => p.id === `builtin_${presetType}`);
+    if (found) {
+      handleSelectPreset(found);
+    }
+  };
+
+  const handleOpenSaveModal = () => {
+    const defaultName = activePreset && !activePreset.isBuiltIn
+      ? `${activePreset.nome} (Cópia)`
+      : activeCronograma?.nome
+        ? `Ciclo ${activeCronograma.nome}`
+        : 'Meu Ciclo Personalizado';
+
+    setSavePresetName(defaultName);
+    setSavePresetDesc('');
+    setSaveModalOpen(true);
+  };
+
+  const handleConfirmSavePreset = () => {
+    if (!savePresetName.trim()) return;
+
+    const newPreset: ReorganizePreset = {
+      id: `preset_custom_${Date.now()}`,
+      nome: savePresetName.trim(),
+      descricao: savePresetDesc.trim() || undefined,
+      isBuiltIn: false,
+      distributionMode,
+      topicsPerDay,
+      studyDaysMode,
+      customDays: studyDaysMode === 'custom' ? customDays : undefined,
+      avoidSameSubjectPerDay,
+      materiaConfigs: { ...materiaConfigs },
+      materiaOrder: [...materiaOrder],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    const updated = [...presets, newPreset];
+    setPresets(updated);
+    saveReorganizePresetsToStorage(updated);
+    setActivePresetId(newPreset.id);
+    setIsPresetModified(false);
+    setSaveModalOpen(false);
+    showFeedback(`Preset "${newPreset.nome}" salvo com sucesso!`, 'success');
+  };
+
+  const handleUpdateCurrentPreset = () => {
+    if (!activePreset) return;
+
+    if (activePreset.isBuiltIn) {
+      setSavePresetName(`${activePreset.nome} (Personalizado)`);
+      setSavePresetDesc(`Baseado no modelo ${activePreset.nome}`);
+      setSaveModalOpen(true);
+      return;
+    }
+
+    const updatedPresets = presets.map(p => {
+      if (p.id === activePreset.id) {
+        return {
+          ...p,
+          distributionMode,
+          topicsPerDay,
+          studyDaysMode,
+          customDays: studyDaysMode === 'custom' ? customDays : undefined,
+          avoidSameSubjectPerDay,
+          materiaConfigs: { ...materiaConfigs },
+          materiaOrder: [...materiaOrder],
+          updatedAt: Date.now()
+        };
+      }
+      return p;
+    });
+
+    setPresets(updatedPresets);
+    saveReorganizePresetsToStorage(updatedPresets);
+    setIsPresetModified(false);
+    showFeedback(`Preset "${activePreset.nome}" atualizado com sucesso!`, 'success');
+  };
+
+  const handleUpdatePresetById = (presetId: string) => {
+    const target = presets.find(p => p.id === presetId);
+    if (!target || target.isBuiltIn) return;
+
+    const updatedPresets = presets.map(p => {
+      if (p.id === presetId) {
+        return {
+          ...p,
+          distributionMode,
+          topicsPerDay,
+          studyDaysMode,
+          customDays: studyDaysMode === 'custom' ? customDays : undefined,
+          avoidSameSubjectPerDay,
+          materiaConfigs: { ...materiaConfigs },
+          materiaOrder: [...materiaOrder],
+          updatedAt: Date.now()
+        };
+      }
+      return p;
+    });
+
+    setPresets(updatedPresets);
+    saveReorganizePresetsToStorage(updatedPresets);
+    if (activePresetId === presetId) {
+      setIsPresetModified(false);
+    }
+    showFeedback(`Preset "${target.nome}" atualizado com a configuração atual!`, 'success');
+  };
+
+  const handleDeletePreset = (presetId: string) => {
+    const target = presets.find(p => p.id === presetId);
+    if (!target || target.isBuiltIn) return;
+
+    const updated = presets.filter(p => p.id !== presetId);
+    setPresets(updated);
+    saveReorganizePresetsToStorage(updated);
+    if (activePresetId === presetId) {
+      const fallback = updated.find(p => p.id === 'builtin_concurseiro') || updated[0];
+      if (fallback) {
+        handleSelectPreset(fallback);
+      }
+    }
+    setPresetToDelete(null);
+    showFeedback(`Preset "${target.nome}" excluído.`, 'info');
   };
 
   // Reordering functions
@@ -234,6 +428,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     nextOrder[idx] = nextOrder[swapWith];
     nextOrder[swapWith] = temp;
     setMateriaOrder(nextOrder);
+    setIsPresetModified(true);
   };
 
   const handleMoveTopicInMateria = (materia: string, topicId: string, direction: 'up' | 'down') => {
@@ -261,6 +456,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   };
 
   const handleUpdateMateriaFreq = (materia: string, freq: MateriaFrequencyMode) => {
+    setIsPresetModified(true);
     setMateriaConfigs(prev => ({
       ...prev,
       [materia]: {
@@ -272,6 +468,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   };
 
   const handleToggleMateriaIntercalationGroup = (materia: string) => {
+    setIsPresetModified(true);
     setMateriaConfigs(prev => {
       const current = prev[materia] || { materia, frequencia: 'intercalada', grupoIntercalacao: 'A' };
       const nextGroup = current.grupoIntercalacao === 'A' ? 'B' : 'A';
@@ -286,6 +483,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   };
 
   const handleToggleMateriaAllowedDay = (materia: string, day: number) => {
+    setIsPresetModified(true);
     setMateriaConfigs(prev => {
       const current = prev[materia] || { materia, frequencia: 'padrao' };
       const allowed = current.diasPermitidos ? [...current.diasPermitidos] : [];
@@ -303,6 +501,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   };
 
   const handleToggleCustomDay = (day: number) => {
+    setIsPresetModified(true);
     setCustomDays(prev => {
       const exists = prev.includes(day);
       if (exists && prev.length === 1) return prev; // Keep at least 1 day
@@ -584,7 +783,10 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 </label>
                 <select
                   value={topicsPerDay}
-                  onChange={(e) => setTopicsPerDay(Number(e.target.value))}
+                  onChange={(e) => {
+                    setTopicsPerDay(Number(e.target.value));
+                    setIsPresetModified(true);
+                  }}
                   className="w-full px-3 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 font-medium focus:outline-hidden focus:border-zinc-900 cursor-pointer"
                 >
                   <option value={1}>1 tópico por dia (Recomendado)</option>
@@ -600,7 +802,10 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 </label>
                 <select
                   value={studyDaysMode}
-                  onChange={(e) => setStudyDaysMode(e.target.value as any)}
+                  onChange={(e) => {
+                    setStudyDaysMode(e.target.value as any);
+                    setIsPresetModified(true);
+                  }}
                   className="w-full px-3 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 font-medium focus:outline-hidden focus:border-zinc-900 cursor-pointer"
                 >
                   <option value="seg-sab">Segunda a Sábado (Folga Domingo)</option>
@@ -644,7 +849,10 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 <input
                   type="checkbox"
                   checked={avoidSameSubjectPerDay}
-                  onChange={(e) => setAvoidSameSubjectPerDay(e.target.checked)}
+                  onChange={(e) => {
+                    setAvoidSameSubjectPerDay(e.target.checked);
+                    setIsPresetModified(true);
+                  }}
                   className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
                 />
                 <span className="font-medium">
@@ -654,18 +862,166 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
             )}
           </div>
 
+          {/* Feedback banner */}
+          {feedbackMsg && (
+            <div className={`p-3 px-4 rounded-xl text-xs font-semibold border flex items-center justify-between transition-all animate-in fade-in slide-in-from-top-2 ${
+              feedbackMsg.type === 'success' ? 'bg-emerald-50 text-emerald-900 border-emerald-300' :
+              feedbackMsg.type === 'error' ? 'bg-red-50 text-red-900 border-red-300' :
+              'bg-amber-50 text-amber-900 border-amber-300'
+            }`}>
+              <div className="flex items-center gap-2">
+                {feedbackMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <Info className="w-4 h-4 text-amber-600 shrink-0" />}
+                <span>{feedbackMsg.text}</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setFeedbackMsg(null)}
+                className="text-zinc-400 hover:text-zinc-700 p-1 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* TAB CONTENT A: Rules, Combinations & Subject Frequencies */}
           {activeTabSection === 'regras' && (
             <div className="space-y-4">
+              {/* SECTION: PRESETS DE ORGANIZAÇÃO (Salvar, Atualizar, Excluir, Gerenciar) */}
+              <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Bookmark className="w-4 h-4 text-amber-600" />
+                      <span className="text-xs font-bold text-zinc-800 uppercase tracking-wider">
+                        2. Presets de Organização
+                      </span>
+                      {activePreset && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                          activePreset.isBuiltIn
+                            ? 'bg-zinc-100 text-zinc-700 border border-zinc-200'
+                            : 'bg-amber-100 text-amber-900 border border-amber-300'
+                        }`}>
+                          {activePreset.isBuiltIn ? '⚙️ Padrão' : '★ Personalizado'}: <strong>{activePreset.nome}</strong>
+                        </span>
+                      )}
+                      {isPresetModified && (
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                          Modificado
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-zinc-500">
+                      Aplique combinações predefinidas ou salve sua própria metodologia com frequências e dias personalizados.
+                    </p>
+                  </div>
+
+                  {/* Actions: Atualizar, Salvar Novo, Gerenciar */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {!activePreset?.isBuiltIn ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleUpdateCurrentPreset}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isPresetModified
+                              ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 border-amber-400 shadow-xs'
+                              : 'bg-white hover:bg-zinc-50 text-zinc-700 border-zinc-200'
+                          }`}
+                          title="Sobrescrever este preset com as configurações da tela"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isPresetModified ? 'text-zinc-950' : 'text-zinc-500'}`} />
+                          <span>Atualizar Preset</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPresetToDelete(activePreset)}
+                          className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-zinc-200 transition-colors cursor-pointer"
+                          title="Excluir este preset personalizado"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      isPresetModified && (
+                        <button
+                          type="button"
+                          onClick={handleOpenSaveModal}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 transition-all cursor-pointer flex items-center gap-1.5"
+                          title="Salvar alterações em um novo preset"
+                        >
+                          <BookmarkPlus className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Salvar como Novo Preset</span>
+                        </button>
+                      )
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleOpenSaveModal}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <BookmarkPlus className="w-3.5 h-3.5 text-zinc-500" />
+                      <span>Salvar Preset</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setManageModalOpen(true)}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-zinc-600" />
+                      <span>Gerenciar ({presets.length})</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Carousel / Chips of Presets */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar">
+                  {presets.map(p => {
+                    const isSelected = activePresetId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleSelectPreset(p)}
+                        className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs ring-1 ring-zinc-900'
+                            : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                        }`}
+                        title={p.descricao || p.nome}
+                      >
+                        {p.isBuiltIn ? (
+                          p.id === 'builtin_concurseiro' ? <span>🎯</span> :
+                          p.id === 'builtin_uniforme' ? <span>⚖️</span> :
+                          p.id === 'builtin_intensivo' ? <span>⚡</span> :
+                          <span>📦</span>
+                        ) : (
+                          <span className="text-amber-400 font-bold">★</span>
+                        )}
+                        <span>{p.nome}</span>
+                        {isSelected && isPresetModified && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ml-0.5" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Distribution Mode selector cards */}
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-zinc-800 uppercase tracking-wider">
-                  2. Estratégia de Combinação
+                  3. Estratégia de Combinação
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setDistributionMode('smart_cycle')}
+                    onClick={() => {
+                      setDistributionMode('smart_cycle');
+                      setIsPresetModified(true);
+                    }}
                     className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative ${
                       distributionMode === 'smart_cycle'
                         ? 'bg-zinc-900 text-white border-zinc-900 shadow-md ring-1 ring-zinc-900'
@@ -686,7 +1042,10 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setDistributionMode('cycle')}
+                    onClick={() => {
+                      setDistributionMode('cycle');
+                      setIsPresetModified(true);
+                    }}
                     className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       distributionMode === 'cycle'
                         ? 'bg-zinc-900 text-white border-zinc-900 shadow-md ring-1 ring-zinc-900'
@@ -704,7 +1063,10 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setDistributionMode('sequential')}
+                    onClick={() => {
+                      setDistributionMode('sequential');
+                      setIsPresetModified(true);
+                    }}
                     className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                       distributionMode === 'sequential'
                         ? 'bg-zinc-900 text-white border-zinc-900 shadow-md ring-1 ring-zinc-900'
@@ -728,42 +1090,17 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
                       <span className="text-xs font-bold text-zinc-800 uppercase tracking-wider block">
-                        3. Regras de Frequência das Matérias
+                        4. Regras de Frequência das Matérias
                       </span>
                       <p className="text-[11px] text-zinc-500 mt-0.5">
                         Defina quais matérias caem toda semana e quais serão intercaladas entre si.
                       </p>
                     </div>
 
-                    {/* 1-Click Presets */}
-                    <div className="flex items-center gap-1.5 bg-zinc-100 p-1 rounded-lg border border-zinc-200">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-1.5">
-                        Presets:
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleApplyPreset('concurseiro')}
-                        className="px-2 py-1 text-[11px] font-semibold bg-white hover:bg-zinc-50 text-zinc-900 rounded border border-zinc-200 shadow-2xs cursor-pointer transition-colors"
-                        title="Básicas toda semana + Específicas intercaladas"
-                      >
-                        🎯 Concurseiro
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleApplyPreset('uniforme')}
-                        className="px-2 py-1 text-[11px] font-semibold bg-white hover:bg-zinc-50 text-zinc-700 rounded border border-zinc-200 shadow-2xs cursor-pointer transition-colors"
-                        title="Todas as matérias distribuídas por igual"
-                      >
-                        ⚖️ Uniforme
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleApplyPreset('intensivo')}
-                        className="px-2 py-1 text-[11px] font-semibold bg-white hover:bg-zinc-50 text-zinc-700 rounded border border-zinc-200 shadow-2xs cursor-pointer transition-colors"
-                        title="Matérias pesadas 2x por semana"
-                      >
-                        ⚡ Intensivo
-                      </button>
+                    {/* Active preset status indicator */}
+                    <div className="flex items-center gap-1.5 bg-zinc-100 p-1 px-2 rounded-lg border border-zinc-200 text-[11px] text-zinc-600">
+                      <span>Preset ativo:</span>
+                      <strong className="text-zinc-900">{activePreset?.nome}</strong>
                     </div>
                   </div>
 
@@ -1331,6 +1668,293 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* SUB-MODAL 1: Salvar Novo Preset */}
+      {saveModalOpen && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-md w-full p-5 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
+                  <BookmarkPlus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-900">Salvar Preset de Organização</h4>
+                  <p className="text-[11px] text-zinc-500">Grave esta configuração para reutilizar em qualquer cronograma.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSaveModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-700 p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
+                  Nome do Preset *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Ciclo Reta Final 2x, Ciclo Padrão PF..."
+                  value={savePresetName}
+                  onChange={(e) => setSavePresetName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-300 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white font-medium"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 mb-1">
+                  Descrição ou Observação (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Ex: 2 tópicos/dia, Segunda a Sexta, Português e Dir. Adm toda semana..."
+                  value={savePresetDesc}
+                  onChange={(e) => setSavePresetDesc(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-zinc-50 border border-zinc-300 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white resize-none"
+                />
+              </div>
+
+              {/* Summary of what is being saved */}
+              <div className="p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-xs space-y-1.5 text-zinc-600">
+                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
+                  Resumo dos parâmetros a salvar:
+                </span>
+                <div className="flex items-center justify-between">
+                  <span>Estratégia:</span>
+                  <strong className="text-zinc-800 capitalize">
+                    {distributionMode === 'smart_cycle' ? 'Ciclo Inteligente' : distributionMode === 'cycle' ? 'Ciclo Tradicional' : 'Sequencial'}
+                  </strong>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Ritmo diário:</span>
+                  <strong className="text-zinc-800">{topicsPerDay} tópico(s) por dia</strong>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Dias de estudo:</span>
+                  <strong className="text-zinc-800">
+                    {studyDaysMode === 'seg-sab' ? 'Segunda a Sábado' : studyDaysMode === 'seg-sex' ? 'Segunda a Sexta' : studyDaysMode === 'todos' ? 'Todos os dias' : `${customDays.length} dias selecionados`}
+                  </strong>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Regras de matérias:</span>
+                  <strong className="text-zinc-800">{Object.keys(materiaConfigs).length} matérias configuradas</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setSaveModalOpen(false)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-600 hover:text-zinc-900 rounded-lg cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!savePresetName.trim()}
+                onClick={handleConfirmSavePreset}
+                className="px-4 py-1.5 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-white rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5 text-amber-300" />
+                <span>Salvar Preset</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 2: Confirmar Exclusão de Preset */}
+      {presetToDelete && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-sm w-full p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-zinc-900">Excluir Preset?</h4>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Deseja remover o preset <strong>"{presetToDelete.nome}"</strong>? Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setPresetToDelete(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-600 hover:text-zinc-900 rounded-lg cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeletePreset(presetToDelete.id)}
+                className="px-4 py-1.5 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Excluir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 3: Gerenciar Todos os Presets */}
+      {manageModalOpen && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-2xl w-full flex flex-col max-h-[85vh]">
+            <div className="p-4 px-5 border-b border-zinc-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center text-zinc-700">
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-900">Gerenciar Presets de Organização</h4>
+                  <p className="text-xs text-zinc-500">Selecione, atualize ou remova seus modelos salvos.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManageModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-700 p-1 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-3 flex-1">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                  Presets Disponíveis ({presets.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManageModalOpen(false);
+                    handleOpenSaveModal();
+                  }}
+                  className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5" />
+                  <span>Novo Preset</span>
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {presets.map(p => {
+                  const isActive = activePresetId === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                        isActive
+                          ? 'bg-amber-50/50 border-amber-300 ring-1 ring-amber-300'
+                          : 'bg-zinc-50/70 border-zinc-200 hover:bg-zinc-50'
+                      }`}
+                    >
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-zinc-900 truncate">
+                            {p.nome}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            p.isBuiltIn
+                              ? 'bg-zinc-200/80 text-zinc-700'
+                              : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          }`}>
+                            {p.isBuiltIn ? '⚙️ Padrão' : '★ Personalizado'}
+                          </span>
+                          {isActive && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-900 text-white">
+                              Em Uso
+                            </span>
+                          )}
+                        </div>
+                        {p.descricao && (
+                          <p className="text-[11px] text-zinc-500 leading-tight">
+                            {p.descricao}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-[10px] text-zinc-500 pt-0.5 flex-wrap">
+                          <span>Modo: <strong className="text-zinc-700 capitalize">{p.distributionMode}</strong></span>
+                          <span>•</span>
+                          <span>Ritmo: <strong className="text-zinc-700">{p.topicsPerDay} tópicos/dia</strong></span>
+                          <span>•</span>
+                          <span>Dias: <strong className="text-zinc-700">{p.studyDaysMode}</strong></span>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!isActive ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleSelectPreset(p);
+                              setManageModalOpen(false);
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white shadow-2xs transition-colors cursor-pointer"
+                          >
+                            Aplicar
+                          </button>
+                        ) : (
+                          <span className="px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            <span>Ativo</span>
+                          </span>
+                        )}
+
+                        {!p.isBuiltIn && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePresetById(p.id)}
+                              className="p-1.5 text-zinc-500 hover:text-zinc-800 hover:bg-white rounded-lg border border-zinc-200 transition-colors cursor-pointer"
+                              title="Atualizar este preset com a configuração atual da tela"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPresetToDelete(p)}
+                              className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-zinc-200 transition-colors cursor-pointer"
+                              title="Excluir preset"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 px-5 border-t border-zinc-200 bg-zinc-50 flex items-center justify-between shrink-0">
+              <span className="text-xs text-zinc-500">
+                Seus presets personalizados ficam salvos no seu navegador para uso contínuo.
+              </span>
+              <button
+                type="button"
+                onClick={() => setManageModalOpen(false)}
+                className="px-4 py-1.5 text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg shadow-sm transition-all cursor-pointer"
+              >
+                Concluído
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

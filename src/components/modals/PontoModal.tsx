@@ -148,216 +148,305 @@ export const PontoModal: React.FC<PontoModalProps> = ({
             </div>
           )}
 
-          {/* Cronograma Selector */}
-          <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-              Cronograma / Edital *
-            </label>
-            <div className="relative">
-              <select
-                value={cronogramaId}
-                onChange={(e) => setCronogramaId(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all font-medium cursor-pointer"
-              >
-                {cronogramas.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Study Type Division Selector (Doutrina, Lei Seca, Jurisprudência) */}
-          <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
-              Tipo de Estudo *
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setTipoEstudo('doutrina')}
-                className={`py-2 px-2 rounded-lg border text-center text-xs flex flex-col items-center gap-1 transition-all ${
-                  tipoEstudo === 'doutrina'
-                    ? 'bg-zinc-900 text-white border-zinc-900 font-semibold shadow-2xs'
-                    : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
-                }`}
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Doutrina</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTipoEstudo('lei_seca')}
-                className={`py-2 px-2 rounded-lg border text-center text-xs flex flex-col items-center gap-1 transition-all ${
-                  tipoEstudo === 'lei_seca'
-                    ? 'bg-amber-600 text-white border-amber-600 font-semibold shadow-2xs'
-                    : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
-                }`}
-              >
-                <Scale className="w-3.5 h-3.5" />
-                <span>Lei Seca</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTipoEstudo('jurisprudencia')}
-                className={`py-2 px-2 rounded-lg border text-center text-xs flex flex-col items-center gap-1 transition-all ${
-                  tipoEstudo === 'jurisprudencia'
-                    ? 'bg-emerald-700 text-white border-emerald-700 font-semibold shadow-2xs'
-                    : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
-                }`}
-              >
-                <Landmark className="w-3.5 h-3.5" />
-                <span>Jurisprudência</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-              Título do tópico / conteúdo *
-            </label>
-            <input
-              type="text"
-              required
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Ex.: Atos Administrativos — Espécies e Revogação"
-              className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium"
-            />
-          </div>
-
-          {/* Conditional field for Lei Seca or Jurisprudencia */}
-          {tipoEstudo === 'lei_seca' && (
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-800 mb-1">
-                Artigos da Lei / Legislação Aplicável
-              </label>
-              <input
-                type="text"
-                value={artigosLei}
-                onChange={(e) => setArtigosLei(e.target.value)}
-                placeholder="Ex.: Arts. 1º a 30 da Lei 14.133/21 ou CF/88 Art. 5º (I a XXX)"
-                className="w-full px-3 py-2 text-xs bg-amber-50/50 border border-amber-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-amber-600 focus:bg-white font-mono"
-              />
-            </div>
-          )}
-
-          {tipoEstudo === 'jurisprudencia' && (
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-emerald-800 mb-1">
-                Súmulas, Temas e Informativos
-              </label>
-              <input
-                type="text"
-                value={jurisprudenciaRef}
-                onChange={(e) => setJurisprudenciaRef(e.target.value)}
-                placeholder="Ex.: Súmula Vinculante 3 STF, Tema 1199 STF, Informativo 750 STJ"
-                className="w-full px-3 py-2 text-xs bg-emerald-50/50 border border-emerald-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-emerald-600 focus:bg-white font-mono"
-              />
-            </div>
-          )}
-
-          {/* Subject & Date Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Subject selector */}
-            <div>
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-                Matéria *
-              </label>
-              <select
-                value={isNovaMateria ? '__NOVA__' : materia}
-                onChange={(e) => {
-                  if (e.target.value === '__NOVA__') {
-                    setIsNovaMateria(true);
-                  } else {
-                    setIsNovaMateria(false);
-                    setMateria(e.target.value);
-                  }
-                }}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium cursor-pointer"
-              >
-                {materias.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-                <option value="__NOVA__">➕ Criar nova matéria...</option>
-              </select>
-            </div>
-
-            {/* Date picker */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  Data planejada
-                </label>
-                {data && (
-                  <span className="text-[10px] font-bold text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded">
-                    {getDiaDaSemana(data).nomeCompleto}
-                  </span>
-                )}
+          {ponto ? (
+            // Mode: Editing an existing study point
+            <>
+              {/* Info Text */}
+              <div className="p-3 bg-zinc-50 border border-zinc-150 rounded-lg text-zinc-600 text-xs leading-relaxed">
+                Você está editando um ponto de estudo já cadastrado. Conforme as regras, apenas a <strong>Matéria</strong> e o <strong>Assunto (Título)</strong> podem ser personalizados após o cadastro.
               </div>
-              <input
-                type="date"
-                value={data}
-                onChange={(e) => setData(e.target.value)}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-mono"
-              />
-            </div>
-          </div>
 
-          {/* New Subject Details if selected */}
-          {isNovaMateria && (
-            <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2.5">
+              {/* Title / Assunto */}
               <div>
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
-                  Nome da nova matéria
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Assunto estudado *
                 </label>
                 <input
                   type="text"
-                  value={novaMateriaNome}
-                  onChange={(e) => setNovaMateriaNome(e.target.value)}
-                  placeholder="Ex.: Direito Urbanístico"
-                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-200 rounded-md text-zinc-900 focus:outline-hidden focus:border-zinc-900"
+                  required
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  placeholder="Ex.: Atos Administrativos — Espécies e Revogação"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium"
                 />
               </div>
 
+              {/* Subject selector */}
               <div>
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
-                  Cor de identificação
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Matéria *
                 </label>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {COLOR_PALETTE.map(c => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setNovaMateriaCor(c)}
-                      className={`w-5 h-5 rounded-full transition-transform ${
-                        novaMateriaCor === c ? 'scale-125 ring-2 ring-zinc-900 ring-offset-1' : 'hover:scale-110'
-                      }`}
-                      style={{ backgroundColor: c }}
-                    />
+                <select
+                  value={isNovaMateria ? '__NOVA__' : materia}
+                  onChange={(e) => {
+                    if (e.target.value === '__NOVA__') {
+                      setIsNovaMateria(true);
+                    } else {
+                      setIsNovaMateria(false);
+                      setMateria(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium cursor-pointer"
+                >
+                  {materias.map(m => (
+                    <option key={m} value={m}>{m}</option>
                   ))}
+                  <option value="__NOVA__">➕ Criar nova matéria...</option>
+                </select>
+              </div>
+
+              {/* New Subject Details if selected */}
+              {isNovaMateria && (
+                <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2.5">
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
+                      Nome da nova matéria
+                    </label>
+                    <input
+                      type="text"
+                      value={novaMateriaNome}
+                      onChange={(e) => setNovaMateriaNome(e.target.value)}
+                      placeholder="Ex.: Direito Urbanístico"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-200 rounded-md text-zinc-900 focus:outline-hidden focus:border-zinc-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
+                      Cor de identificação
+                    </label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {COLOR_PALETTE.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setNovaMateriaCor(c)}
+                          className={`w-5 h-5 rounded-full transition-transform ${
+                            novaMateriaCor === c ? 'scale-125 ring-2 ring-zinc-900 ring-offset-1' : 'hover:scale-110'
+                          }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            // Mode: Creating a new study point
+            <>
+              {/* Cronograma Selector */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Cronograma / Edital *
+                </label>
+                <div className="relative">
+                  <select
+                    value={cronogramaId}
+                    onChange={(e) => setCronogramaId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all font-medium cursor-pointer"
+                  >
+                    {cronogramas.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Notes */}
-          <div>
-            <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-              Anotações, páginas e metas (opcional)
-            </label>
-            <textarea
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              rows={3}
-              placeholder="Ex.: Páginas 45 a 80 da sinopse, resolver 25 questões no TEC Concursos..."
-              className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-sans leading-relaxed"
-            />
-          </div>
+              {/* Study Type Division Selector (Doutrina, Lei Seca, Jurisprudência) */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5">
+                  Tipo de Estudo *
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTipoEstudo('doutrina')}
+                    className={`py-2 px-2 rounded-lg border text-center text-xs flex flex-col items-center gap-1 transition-all ${
+                      tipoEstudo === 'doutrina'
+                        ? 'bg-zinc-900 text-white border-zinc-900 font-semibold shadow-2xs'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Doutrina</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTipoEstudo('lei_seca')}
+                    className={`py-2 px-2 rounded-lg border text-center text-xs flex flex-col items-center gap-1 transition-all ${
+                      tipoEstudo === 'lei_seca'
+                        ? 'bg-amber-600 text-white border-amber-600 font-semibold shadow-2xs'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <Scale className="w-3.5 h-3.5" />
+                    <span>Lei Seca</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTipoEstudo('jurisprudencia')}
+                    className={`py-2 px-2 rounded-lg border text-center text-xs flex flex-col items-center gap-1 transition-all ${
+                      tipoEstudo === 'jurisprudencia'
+                        ? 'bg-emerald-700 text-white border-emerald-700 font-semibold shadow-2xs'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                    }`}
+                  >
+                    <Landmark className="w-3.5 h-3.5" />
+                    <span>Jurisprudência</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Title */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Título do tópico / conteúdo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  placeholder="Ex.: Atos Administrativos — Espécies e Revogação"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium"
+                />
+              </div>
+
+              {/* Conditional field for Lei Seca or Jurisprudencia */}
+              {tipoEstudo === 'lei_seca' && (
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-amber-800 mb-1">
+                    Artigos da Lei / Legislação Aplicável
+                  </label>
+                  <input
+                    type="text"
+                    value={artigosLei}
+                    onChange={(e) => setArtigosLei(e.target.value)}
+                    placeholder="Ex.: Arts. 1º a 30 da Lei 14.133/21 ou CF/88 Art. 5º (I a XXX)"
+                    className="w-full px-3 py-2 text-xs bg-amber-50/50 border border-amber-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-amber-600 focus:bg-white font-mono"
+                  />
+                </div>
+              )}
+
+              {tipoEstudo === 'jurisprudencia' && (
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-emerald-800 mb-1">
+                    Súmulas, Temas e Informativos
+                  </label>
+                  <input
+                    type="text"
+                    value={jurisprudenciaRef}
+                    onChange={(e) => setJurisprudenciaRef(e.target.value)}
+                    placeholder="Ex.: Súmula Vinculante 3 STF, Tema 1199 STF, Informativo 750 STJ"
+                    className="w-full px-3 py-2 text-xs bg-emerald-50/50 border border-emerald-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-emerald-600 focus:bg-white font-mono"
+                  />
+                </div>
+              )}
+
+              {/* Subject & Date Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Subject selector */}
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                    Matéria *
+                  </label>
+                  <select
+                    value={isNovaMateria ? '__NOVA__' : materia}
+                    onChange={(e) => {
+                      if (e.target.value === '__NOVA__') {
+                        setIsNovaMateria(true);
+                      } else {
+                        setIsNovaMateria(false);
+                        setMateria(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium cursor-pointer"
+                  >
+                    {materias.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                    <option value="__NOVA__">➕ Criar nova matéria...</option>
+                  </select>
+                </div>
+
+                {/* Date picker */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                      Data planejada
+                    </label>
+                    {data && (
+                      <span className="text-[10px] font-bold text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded">
+                        {getDiaDaSemana(data).nomeCompleto}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="date"
+                    value={data}
+                    onChange={(e) => setData(e.target.value)}
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* New Subject Details if selected */}
+              {isNovaMateria && (
+                <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg space-y-2.5">
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
+                      Nome da nova matéria
+                    </label>
+                    <input
+                      type="text"
+                      value={novaMateriaNome}
+                      onChange={(e) => setNovaMateriaNome(e.target.value)}
+                      placeholder="Ex.: Direito Urbanístico"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-zinc-200 rounded-md text-zinc-900 focus:outline-hidden focus:border-zinc-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
+                      Cor de identificação
+                    </label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {COLOR_PALETTE.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setNovaMateriaCor(c)}
+                          className={`w-5 h-5 rounded-full transition-transform ${
+                            novaMateriaCor === c ? 'scale-125 ring-2 ring-zinc-900 ring-offset-1' : 'hover:scale-110'
+                          }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Anotações, páginas e metas (opcional)
+                </label>
+                <textarea
+                  value={notas}
+                  onChange={(e) => setNotas(e.target.value)}
+                  rows={3}
+                  placeholder="Ex.: Páginas 45 a 80 da sinopse, resolver 25 questões no TEC Concursos..."
+                  className="w-full px-3 py-2 text-xs bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-sans leading-relaxed"
+                />
+              </div>
+            </>
+          )}
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100">

@@ -20,7 +20,8 @@ import {
   Scale,
   Landmark,
   AlertTriangle,
-  X
+  X,
+  Edit3
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { hojeStr, formatarDataBr } from '../utils/helpers';
@@ -29,6 +30,7 @@ interface FocusTimerViewProps {
   sessoesEstudo?: SessaoEstudo[];
   onSaveSessao?: (sessao: Omit<SessaoEstudo, 'id'>, marcarPontoLidoId?: string) => void;
   onDeleteSessao?: (id: string) => void;
+  onUpdateSessao?: (id: string, updated: Partial<SessaoEstudo>) => void;
   materias?: string[];
   materiasCores?: Record<string, string>;
   pontos?: PontoEstudo[];
@@ -64,6 +66,7 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
   sessoesEstudo = [],
   onSaveSessao = (_sessao, _marcarPontoLidoId) => {},
   onDeleteSessao = (_id) => {},
+  onUpdateSessao = (_id, _updated) => {},
   materias = [],
   materiasCores = {},
   pontos = [],
@@ -99,6 +102,17 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
   const [isZenMode, setIsZenMode] = useState<boolean>(false);
   const [selectedTipoEstudo, setSelectedTipoEstudo] = useState<TipoEstudo | undefined>(undefined);
   const [showShortSessionModal, setShowShortSessionModal] = useState<boolean>(false);
+
+  // History Edit State
+  const [editingSessao, setEditingSessao] = useState<SessaoEstudo | null>(null);
+  const [editSessaoMateria, setEditSessaoMateria] = useState('');
+  const [editSessaoAssunto, setEditSessaoAssunto] = useState('');
+
+  const handleStartEditSessao = (sessao: SessaoEstudo) => {
+    setEditingSessao(sessao);
+    setEditSessaoMateria(sessao.materia);
+    setEditSessaoAssunto(sessao.assunto);
+  };
 
   // Play pleasant chime with Web Audio API
   const playChime = () => {
@@ -841,6 +855,14 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
                     </div>
 
                     <button
+                      onClick={() => handleStartEditSessao(sessao)}
+                      className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 transition-colors cursor-pointer"
+                      title="Editar registro de sessão"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
                       onClick={() => onDeleteSessao(sessao.id)}
                       className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                       title="Excluir este registro de sessão"
@@ -899,6 +921,97 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
               >
                 Registrar Mesmo Assim
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Sessão do Histórico */}
+      {editingSessao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+          <div 
+            className="bg-white border border-zinc-200 rounded-xl w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-200 bg-zinc-50/70">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-md bg-zinc-200 text-zinc-800">
+                  <Clock className="w-3.5 h-3.5" />
+                </span>
+                <h2 className="font-sans font-semibold text-base text-zinc-900">
+                  Personalizar registro do histórico
+                </h2>
+              </div>
+              <button
+                onClick={() => setEditingSessao(null)}
+                className="p-1 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-200 rounded-md transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="p-5 space-y-4">
+              <div className="p-3 bg-zinc-50 border border-zinc-150 rounded-lg text-zinc-600 text-xs leading-relaxed">
+                Você está editando uma sessão de estudo líquido realizada. Apenas a <strong>Matéria</strong> e o <strong>Assunto</strong> podem ser personalizados.
+              </div>
+
+              {/* Assunto */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Assunto estudado *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editSessaoAssunto}
+                  onChange={(e) => setEditSessaoAssunto(e.target.value)}
+                  placeholder="Ex.: Direito Constitucional - ADI"
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 placeholder-zinc-400 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium"
+                />
+              </div>
+
+              {/* Matéria */}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+                  Matéria *
+                </label>
+                <select
+                  value={editSessaoMateria}
+                  onChange={(e) => setEditSessaoMateria(e.target.value)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-900 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all shadow-2xs font-medium cursor-pointer"
+                >
+                  {materias.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSessao(null)}
+                  className="px-3.5 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!editSessaoAssunto.trim()) return;
+                    onUpdateSessao(editingSessao.id, {
+                      materia: editSessaoMateria,
+                      assunto: editSessaoAssunto.trim()
+                    });
+                    setEditingSessao(null);
+                  }}
+                  className="px-4 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg shadow-2xs transition-colors"
+                >
+                  Salvar alterações
+                </button>
+              </div>
             </div>
           </div>
         </div>

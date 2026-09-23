@@ -15,6 +15,112 @@ export interface MateriaReorgConfig {
   grupoIntercalacao?: 'A' | 'B'; // A = semanas ímpares (1, 3, 5...), B = semanas pares (2, 4, 6...)
 }
 
+export interface ReorganizePreset {
+  id: string;
+  nome: string;
+  descricao?: string;
+  isBuiltIn?: boolean;
+  distributionMode: 'smart_cycle' | 'cycle' | 'sequential';
+  topicsPerDay: number;
+  studyDaysMode: 'seg-sab' | 'seg-sex' | 'todos' | 'custom';
+  customDays?: number[];
+  avoidSameSubjectPerDay?: boolean;
+  materiaConfigs: Record<string, MateriaReorgConfig>;
+  materiaOrder?: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const REORG_PRESETS_STORAGE_KEY = 'estante_reorg_presets_v1';
+
+export function getDefaultBuiltInPresets(): ReorganizePreset[] {
+  return [
+    {
+      id: 'builtin_concurseiro',
+      nome: 'Concurseiro Clássico',
+      descricao: 'Básicas / tronco toda semana + específicas intercaladas em semanas alternadas (Grupo A / B)',
+      isBuiltIn: true,
+      distributionMode: 'smart_cycle',
+      topicsPerDay: 1,
+      studyDaysMode: 'seg-sab',
+      avoidSameSubjectPerDay: true,
+      materiaConfigs: {},
+      createdAt: 1700000000000,
+      updatedAt: 1700000000000
+    },
+    {
+      id: 'builtin_uniforme',
+      nome: 'Ciclo Uniforme',
+      descricao: 'Todas as disciplinas distribuídas com rotação homogênea e regular',
+      isBuiltIn: true,
+      distributionMode: 'smart_cycle',
+      topicsPerDay: 1,
+      studyDaysMode: 'seg-sab',
+      avoidSameSubjectPerDay: true,
+      materiaConfigs: {},
+      createdAt: 1700000000000,
+      updatedAt: 1700000000000
+    },
+    {
+      id: 'builtin_intensivo',
+      nome: 'Intensivo Reta Final',
+      descricao: 'Matérias prioritárias 2x por semana com 2 tópicos diários de ritmo acelerado',
+      isBuiltIn: true,
+      distributionMode: 'smart_cycle',
+      topicsPerDay: 2,
+      studyDaysMode: 'seg-sab',
+      avoidSameSubjectPerDay: true,
+      materiaConfigs: {},
+      createdAt: 1700000000000,
+      updatedAt: 1700000000000
+    },
+    {
+      id: 'builtin_sequencial',
+      nome: 'Blocos Sequenciais',
+      descricao: 'Esgota cada disciplina por completo em sequência antes de passar para a seguinte',
+      isBuiltIn: true,
+      distributionMode: 'sequential',
+      topicsPerDay: 1,
+      studyDaysMode: 'seg-sab',
+      avoidSameSubjectPerDay: true,
+      materiaConfigs: {},
+      createdAt: 1700000000000,
+      updatedAt: 1700000000000
+    }
+  ];
+}
+
+export function loadReorganizePresets(): ReorganizePreset[] {
+  try {
+    const raw = localStorage.getItem(REORG_PRESETS_STORAGE_KEY);
+    const builtIns = getDefaultBuiltInPresets();
+    if (!raw) {
+      localStorage.setItem(REORG_PRESETS_STORAGE_KEY, JSON.stringify(builtIns));
+      return builtIns;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return builtIns;
+    }
+
+    // Merge: ensure builtIns exist and preserve user saved presets
+    const customPresets = parsed.filter((p: ReorganizePreset) => !p.isBuiltIn);
+    return [...builtIns, ...customPresets];
+  } catch (err) {
+    console.error('Erro ao carregar presets de reorganização:', err);
+    return getDefaultBuiltInPresets();
+  }
+}
+
+export function saveReorganizePresetsToStorage(presets: ReorganizePreset[]): void {
+  try {
+    localStorage.setItem(REORG_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  } catch (err) {
+    console.error('Erro ao salvar presets no localStorage:', err);
+  }
+}
+
 export interface ReorganizeScheduleOptions {
   startDate: string; // YYYY-MM-DD
   topicsPerDay: number; // 1, 2, 3

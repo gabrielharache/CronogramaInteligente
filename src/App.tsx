@@ -158,6 +158,13 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     }));
   }, []);
 
+  const handleUpdateSessao = useCallback((id: string, updated: Partial<SessaoEstudo>) => {
+    setState(prev => ({
+      ...prev,
+      sessoesEstudo: (prev.sessoesEstudo || []).map(s => s.id === id ? { ...s, ...updated } : s)
+    }));
+  }, []);
+
   const handleSaveSessao = useCallback((novaSessaoData: Omit<SessaoEstudo, 'id'>, marcarPontoLidoId?: string) => {
     const novaSessao: SessaoEstudo = {
       ...novaSessaoData,
@@ -1408,6 +1415,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
               sessoesEstudo={state.sessoesEstudo || []}
               onSaveSessao={handleSaveSessao}
               onDeleteSessao={handleDeleteSessao}
+              onUpdateSessao={handleUpdateSessao}
               activeTimer={activeTimer}
               onStartTimer={(cfg) => setActiveTimer({ ...cfg, isRunning: true, secondsElapsed: 0 })}
               onPauseTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: false }))}
