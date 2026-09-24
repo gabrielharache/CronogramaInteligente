@@ -555,6 +555,18 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       };
     }
 
+    // Expand divided points so they occupy multiple slots during calculation
+    const expandedPointsByMateria: Record<string, PontoEstudo[]> = {};
+    Object.keys(pointsByMateria).forEach(mat => {
+      expandedPointsByMateria[mat] = [];
+      (pointsByMateria[mat] || []).forEach(p => {
+        const sessionsCount = p.datas && p.datas.length > 1 ? p.datas.length : 1;
+        for (let i = 0; i < sessionsCount; i++) {
+          expandedPointsByMateria[mat].push(p);
+        }
+      });
+    });
+
     // Determine occupied count by date for unselected subjects
     const occupiedCountByDate: Record<string, number> = {};
     pontos.forEach(p => {
@@ -563,7 +575,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       }
     });
 
-    return calculateSmartSchedule(pointsByMateria, {
+    return calculateSmartSchedule(expandedPointsByMateria, {
       startDate,
       topicsPerDay,
       studyDays: activeStudyDays,
@@ -624,12 +636,31 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   const handleExecute = () => {
     if (calculatedDates.length !== orderedPoints.length || orderedPoints.length === 0) return;
 
-    // Ordered points already have their assigned dates
-    const updatedPoints = orderedPoints.map((p, idx) => ({
-      ...p,
-      data: calculatedDates[idx],
-      updatedAt: Date.now()
-    }));
+    // Group calculated dates by point ID to preserve divisions
+    const datesByPointId: Record<string, string[]> = {};
+    orderedPoints.forEach((p, idx) => {
+      if (!datesByPointId[p.id]) {
+        datesByPointId[p.id] = [];
+      }
+      datesByPointId[p.id].push(calculatedDates[idx]);
+    });
+
+    // Create unique updated points with multiple dates if relevant
+    const uniqueUpdatedPoints: PontoEstudo[] = [];
+    const processedIds = new Set<string>();
+
+    orderedPoints.forEach(p => {
+      if (processedIds.has(p.id)) return;
+      processedIds.add(p.id);
+
+      const dates = datesByPointId[p.id] || [];
+      uniqueUpdatedPoints.push({
+        ...p,
+        data: dates[0] || '',
+        datas: dates.length > 1 ? dates : undefined,
+        updatedAt: Date.now()
+      });
+    });
 
     const selectedSubjects = selectedMateriasForReorg;
     const finalPoints: PontoEstudo[] = [];
@@ -650,11 +681,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       .map(p => ({
         ...p,
         data: '', // Taken off calendar, preserved in materias tab
+        datas: undefined,
         updatedAt: Date.now()
       }));
 
-    const updatedPointsMap = new Map(updatedPoints.map(p => [p.id, p]));
-    const omittedPointsMap = new Map(omittedPoints.map(p => [p.id, p]));
+    const updatedPointsMap = new Map(uniqueUpdatedPoints.map(p => [p.id, p]));
 
     selectedSubjects.forEach(materia => {
       // Completed / omitted topics of this subject
@@ -668,9 +699,17 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         });
 
       // Scheduled topics of this subject in user-adjusted queue order
-      const scheduledInQueue = (pointsByMateria[materia] || [])
-        .map(p => updatedPointsMap.get(p.id))
-        .filter((p): p is PontoEstudo => Boolean(p));
+      const processedSubjectIds = new Set<string>();
+      const scheduledInQueue: PontoEstudo[] = [];
+
+      (pointsByMateria[materia] || []).forEach(p => {
+        if (processedSubjectIds.has(p.id)) return;
+        processedSubjectIds.add(p.id);
+        const updated = updatedPointsMap.get(p.id);
+        if (updated) {
+          scheduledInQueue.push(updated);
+        }
+      });
 
       // Prerequisites first, then scheduled topics
       const combined = [...subjectOmitted, ...scheduledInQueue];

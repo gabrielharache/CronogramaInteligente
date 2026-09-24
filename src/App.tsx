@@ -40,6 +40,7 @@ import { ImportBackupModal } from './components/modals/ImportBackupModal';
 import { CronogramaManagerModal } from './components/modals/CronogramaManagerModal';
 import { ExamDateModal } from './components/modals/ExamDateModal';
 import { FocusDurationModal } from './components/modals/FocusDurationModal';
+import { SplitPontoModal } from './components/modals/SplitPontoModal';
 
 interface CronogramaDashboardProps {
   userId?: string;
@@ -69,6 +70,10 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
   const [detailPonto, setDetailPonto] = useState<PontoEstudo | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // Split Ponto Modal States
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+  const [splittingPonto, setSplittingPonto] = useState<PontoEstudo | null>(null);
 
   // Focus configuration states
   const [focusTargetPonto, setFocusTargetPonto] = useState<PontoEstudo | null>(null);
@@ -668,6 +673,71 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
       return {
         ...prev,
         pontos: [...prev.pontos, duplicated]
+      };
+    });
+  }, []);
+
+  const handleConfirmSplit = useCallback((pontoId: string, parts: Array<{ titulo: string; data: string }>, efeitoCascata: boolean) => {
+    setState(prev => {
+      const original = prev.pontos.find(p => p.id === pontoId);
+      if (!original) return prev;
+
+      const datesSelected = parts.map(p => p.data);
+      const extraSessionsCount = datesSelected.length - 1;
+      const firstSelectedDate = datesSelected[0];
+
+      // Shift subsequent points of the same subject if cascade is enabled
+      const daysToShift = extraSessionsCount * 7;
+
+      const nextPontos = prev.pontos.map(p => {
+        if (p.id === pontoId) {
+          return {
+            ...p,
+            data: datesSelected[0], // primary date
+            datas: datesSelected, // all selected dates
+            updatedAt: Date.now()
+          };
+        }
+
+        // Apply shift to other scheduled points of the same subject
+        if (
+          efeitoCascata &&
+          daysToShift > 0 &&
+          p.materia === original.materia &&
+          p.cronogramaId === original.cronogramaId &&
+          p.data &&
+          p.data > firstSelectedDate
+        ) {
+          // Helper to add days to YYYY-MM-DD
+          const shiftDateStr = (dStr: string, days: number) => {
+            const [y, m, d] = dStr.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            dateObj.setDate(dateObj.getDate() + days);
+            const rY = dateObj.getFullYear();
+            const rM = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const rD = String(dateObj.getDate()).padStart(2, '0');
+            return `${rY}-${rM}-${rD}`;
+          };
+
+          const newData = shiftDateStr(p.data, daysToShift);
+          const newDatas = p.datas && p.datas.length > 0 
+            ? p.datas.map(dStr => shiftDateStr(dStr, daysToShift))
+            : undefined;
+
+          return {
+            ...p,
+            data: newData,
+            datas: newDatas,
+            updatedAt: Date.now()
+          };
+        }
+
+        return p;
+      });
+
+      return {
+        ...prev,
+        pontos: nextPontos
       };
     });
   }, []);
@@ -1377,6 +1447,10 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
                       setIsPontoModalOpen(true);
                     }}
                     onDuplicatePonto={handleDuplicatePonto}
+                    onSplitPonto={(p) => {
+                      setSplittingPonto(p);
+                      setIsSplitModalOpen(true);
+                    }}
                     onNovoPonto={() => {
                       setEditingPonto(null);
                       setIsPontoModalOpen(true);
@@ -1417,6 +1491,10 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
                       setIsPontoModalOpen(true);
                     }}
                     onDuplicatePonto={handleDuplicatePonto}
+                    onSplitPonto={(p) => {
+                      setSplittingPonto(p);
+                      setIsSplitModalOpen(true);
+                    }}
                     onNovoPontoNaMateria={(mat) => {
                       setEditingPonto(null);
                       setInitialMateriaForNewPonto(mat);
@@ -1616,7 +1694,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
           setIsDetailModalOpen(false);
           setDetailPonto(null);
         }}
-        ponto={detailPonto}
+        ponto={detailPonto ? (state.pontos.find(p => p.id === detailPonto.id) || detailPonto) : null}
         materiaCor={detailPonto ? (state.materiasCores[detailPonto.materia] || '#18181B') : '#18181B'}
         onUpdatePonto={handleUpdatePonto}
         onDeletePonto={handleDeletePonto}
@@ -1625,7 +1703,21 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
           setIsPontoModalOpen(true);
         }}
         onDuplicatePonto={handleDuplicatePonto}
+        onSplitPonto={(p) => {
+          setSplittingPonto(p);
+          setIsSplitModalOpen(true);
+        }}
         onStartFocus={handleStartFocus}
+      />
+
+      <SplitPontoModal
+        isOpen={isSplitModalOpen}
+        onClose={() => {
+          setIsSplitModalOpen(false);
+          setSplittingPonto(null);
+        }}
+        ponto={splittingPonto}
+        onConfirmSplit={handleConfirmSplit}
       />
 
       <FocusDurationModal

@@ -17,6 +17,7 @@ interface WeeklyListViewProps {
   onDeletePonto: (id: string) => void;
   onEditPonto: (ponto: PontoEstudo) => void;
   onDuplicatePonto: (ponto: PontoEstudo) => void;
+  onSplitPonto?: (ponto: PontoEstudo) => void;
   onNovoPonto: () => void;
   onStartFocus?: (ponto: PontoEstudo) => void;
 }
@@ -29,6 +30,7 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
   onDeletePonto,
   onEditPonto,
   onDuplicatePonto,
+  onSplitPonto,
   onNovoPonto,
   onStartFocus
 }) => {
@@ -46,16 +48,45 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
   });
 
   // Group filtered points by weekStart
-  const groupedByWeek: Record<string, PontoEstudo[]> = {};
+  const groupedByWeek: Record<string, Array<{ ponto: PontoEstudo; resolvedDate: string }>> = {};
   (pontos || []).forEach(p => {
-    if (p.data) {
-      const ws = getWeekStart(p.data);
-      if (!groupedByWeek[ws]) groupedByWeek[ws] = [];
-      groupedByWeek[ws].push(p);
-    } else if (!p.lido && !p.qFeitas) {
+    const scheduleDates = p.datas && p.datas.length > 0 ? p.datas : [p.data];
+    let hasDate = false;
+    
+    scheduleDates.forEach(dateStr => {
+      if (dateStr) {
+        hasDate = true;
+        const ws = getWeekStart(dateStr);
+        if (!groupedByWeek[ws]) groupedByWeek[ws] = [];
+        groupedByWeek[ws].push({ ponto: p, resolvedDate: dateStr });
+      }
+    });
+
+    if (!hasDate && !p.lido && !p.qFeitas) {
       // Apenas tópicos pendentes sem data aparecem em "Sem data definida" no cronograma semanal
       if (!groupedByWeek['sem-data']) groupedByWeek['sem-data'] = [];
-      groupedByWeek['sem-data'].push(p);
+      groupedByWeek['sem-data'].push({ ponto: p, resolvedDate: '' });
+    }
+  });
+
+  // Sort each week's points by their specific study date inside that week, then by logical order
+  Object.keys(groupedByWeek).forEach(ws => {
+    if (ws === 'sem-data') {
+      groupedByWeek[ws].sort((a, b) => {
+        const oA = typeof a.ponto.ordem === 'number' ? a.ponto.ordem : 999999;
+        const oB = typeof b.ponto.ordem === 'number' ? b.ponto.ordem : 999999;
+        return oA - oB;
+      });
+    } else {
+      groupedByWeek[ws].sort((a, b) => {
+        if (a.resolvedDate !== b.resolvedDate) {
+          return a.resolvedDate.localeCompare(b.resolvedDate);
+        }
+        
+        const oA = typeof a.ponto.ordem === 'number' ? a.ponto.ordem : 999999;
+        const oB = typeof b.ponto.ordem === 'number' ? b.ponto.ordem : 999999;
+        return oA - oB;
+      });
     }
   });
 
@@ -140,19 +171,13 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
   return (
     <div className="space-y-4">
       {sortedWeeks.map(weekStart => {
-        const weekPoints = [...(groupedByWeek[weekStart] || [])].sort((a, b) => {
-          if (a.data && b.data && a.data !== b.data) return a.data.localeCompare(b.data);
-          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
-          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
-          if (oA !== oB) return oA - oB;
-          return (a.createdAt || 0) - (b.createdAt || 0);
-        });
+        const weekItems = groupedByWeek[weekStart] || [];
         const isOpen = openWeeks[weekStart] ?? true;
         const weekNum = weekNumberMap[weekStart] || 1;
         const isCurrentWeek = weekStart === currentWeekStart;
 
-        const totalInWeek = weekPoints.length;
-        const doneInWeek = weekPoints.filter(p => p.lido).length;
+        const totalInWeek = weekItems.length;
+        const doneInWeek = weekItems.filter(item => item.ponto.lido).length;
         const pctDone = totalInWeek > 0 ? Math.round((doneInWeek / totalInWeek) * 100) : 0;
 
         return (
@@ -212,16 +237,18 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
             {/* Accordion Content */}
             {isOpen && (
               <div className="divide-y divide-zinc-100">
-                {weekPoints.map(ponto => (
+                {weekItems.map((item, idx) => (
                   <StudyPointCard
-                    key={ponto.id}
-                    ponto={ponto}
-                    materiaCor={materiasCores[ponto.materia] || '#8C1C2C'}
-                    onUpdate={(updated) => onUpdatePonto(ponto.id, updated)}
-                    onDelete={() => onDeletePonto(ponto.id)}
-                    onEdit={() => onEditPonto(ponto)}
-                    onDuplicate={() => onDuplicatePonto(ponto)}
-                    onStartFocus={onStartFocus ? () => onStartFocus(ponto) : undefined}
+                    key={`${item.ponto.id}-${item.resolvedDate}-${idx}`}
+                    ponto={item.ponto}
+                    overrideDate={item.resolvedDate}
+                    materiaCor={materiasCores[item.ponto.materia] || '#8C1C2C'}
+                    onUpdate={(updated) => onUpdatePonto(item.ponto.id, updated)}
+                    onDelete={() => onDeletePonto(item.ponto.id)}
+                    onEdit={() => onEditPonto(item.ponto)}
+                    onDuplicate={() => onDuplicatePonto(item.ponto)}
+                    onSplit={onSplitPonto ? () => onSplitPonto(item.ponto) : undefined}
+                    onStartFocus={onStartFocus ? () => onStartFocus(item.ponto) : undefined}
                   />
                 ))}
               </div>

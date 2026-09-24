@@ -31,7 +31,9 @@ interface StudyPointCardProps {
   onUpdate: (updated: Partial<PontoEstudo>) => void;
   onDelete: () => void;
   onEdit: () => void;
+  overrideDate?: string;
   onDuplicate?: () => void;
+  onSplit?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onStartFocus?: () => void;
@@ -51,7 +53,9 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
   onUpdate,
   onDelete,
   onEdit,
+  overrideDate,
   onDuplicate,
+  onSplit,
   onMoveUp,
   onMoveDown,
   onStartFocus,
@@ -87,7 +91,29 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
     };
   };
 
-  const dayInfo = getDayInfo(ponto.data);
+  const formatMultipleDates = (dates?: string[]) => {
+    if (!dates || dates.length <= 1) return '';
+    const formatted = dates.map(d => {
+      const info = getDayInfo(d);
+      return `${info.weekday} ${info.dayMonth}`;
+    });
+    const last = formatted[formatted.length - 1];
+    const rest = formatted.slice(0, -1).join(', ');
+    return `${rest} e ${last}`;
+  };
+
+  const getPartString = () => {
+    if (!ponto.datas || ponto.datas.length <= 1) return '';
+    const dateToFind = overrideDate || ponto.data;
+    const idx = ponto.datas.indexOf(dateToFind);
+    if (idx !== -1) {
+      return `${idx + 1}/${ponto.datas.length}`;
+    }
+    return '';
+  };
+
+  const displayDate = overrideDate || ponto.data;
+  const dayInfo = getDayInfo(displayDate);
 
   const handleDeleteClick = () => {
     if (deleteArmed) {
@@ -138,7 +164,23 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
 
         {/* Left Day Indicator */}
         <div className="w-12 sm:w-14 shrink-0 text-left pt-0.5">
-          {ponto.data ? (
+          {!overrideDate && ponto.datas && ponto.datas.length > 1 ? (
+            <div className="space-y-1.5 pr-1">
+              {ponto.datas.map((dStr, idx) => {
+                const info = getDayInfo(dStr);
+                return (
+                  <div key={idx} className="pb-1 border-b border-zinc-100 last:border-0 last:pb-0">
+                    <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight leading-none mb-0.5">
+                      {info.weekday}
+                    </div>
+                    <div className="text-xs font-mono font-bold text-zinc-800 leading-none">
+                      {info.dayMonth}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : displayDate ? (
             <>
               <div className="text-xs text-zinc-400 font-medium">
                 {dayInfo.weekday}
@@ -233,11 +275,16 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
 
           {/* Title in bold serif */}
           <h3 
-            className={`font-serif text-base sm:text-[17px] font-bold text-zinc-900 leading-snug tracking-tight ${
+            className={`font-serif text-base sm:text-[17px] font-bold text-zinc-900 leading-snug tracking-tight flex items-center flex-wrap gap-1.5 ${
               ponto.lido ? 'line-through text-zinc-400 font-serif' : ''
             }`}
           >
-            {ponto.titulo}
+            <span>{ponto.titulo}</span>
+            {getPartString() && (
+              <span className="inline-flex items-center text-[10px] font-sans font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-sm" title={`Sessão ${getPartString()} da divisão deste assunto`}>
+                Sessão {getPartString()}
+              </span>
+            )}
           </h3>
 
           {/* Subtitle / Notes / Reference */}
@@ -344,20 +391,30 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
             {/* Anotar */}
             <button
               onClick={() => onUpdate({ showNotes: !ponto.showNotes })}
-              className="hover:text-zinc-800 hover:underline cursor-pointer transition-colors"
+              className={`hover:text-zinc-800 hover:underline cursor-pointer transition-colors ${ponto.showNotes ? 'font-bold text-zinc-900' : ''}`}
             >
               {ponto.showNotes ? 'Fechar anotação' : 'Anotar'}
             </button>
 
-            {onDuplicate && (
+            <span>•</span>
+
+            {/* Checklist */}
+            <button
+              onClick={() => onUpdate({ showChecklist: !ponto.showChecklist })}
+              className={`hover:text-zinc-800 hover:underline cursor-pointer transition-colors ${ponto.showChecklist ? 'font-bold text-zinc-900' : ''}`}
+            >
+              Checklist {ponto.subTopicos && ponto.subTopicos.length > 0 ? `(${ponto.subTopicos.filter(st => st.concluido).length}/${ponto.subTopicos.length})` : ''}
+            </button>
+
+            {onSplit && (
               <>
                 <span>•</span>
                 <button
-                  onClick={onDuplicate}
-                  className="hover:text-zinc-800 hover:underline cursor-pointer transition-colors"
-                  title="Duplicar para revisão"
+                  onClick={onSplit}
+                  className="hover:text-indigo-800 hover:underline cursor-pointer transition-colors font-semibold text-indigo-600"
+                  title="Dividir este assunto em partes e agendar no calendário"
                 >
-                  Duplicar
+                  Dividir
                 </button>
               </>
             )}
@@ -402,6 +459,101 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
               />
             </div>
           )}
+
+          {/* Expanded Checklist Section */}
+          {ponto.showChecklist && (
+            <div className="mt-2.5 pt-2.5 border-t border-zinc-100 space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wide">
+                  Checklist de Sub-tópicos
+                </span>
+                {ponto.subTopicos && ponto.subTopicos.length > 0 && (
+                  <span className="text-[11px] font-mono text-zinc-400">
+                    {Math.round((ponto.subTopicos.filter(s => s.concluido).length / ponto.subTopicos.length) * 100)}% concluído
+                  </span>
+                )}
+              </div>
+
+              {/* Add Sub-tópico Input */}
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const input = form.elements.namedItem('newSubtask') as HTMLInputElement;
+                  const title = input.value.trim();
+                  if (!title) return;
+                  
+                  const newSub = {
+                    id: Math.random().toString(36).slice(2, 9),
+                    titulo: title,
+                    concluido: false
+                  };
+                  const currentList = ponto.subTopicos || [];
+                  onUpdate({ subTopicos: [...currentList, newSub] });
+                  input.value = '';
+                }}
+                className="flex gap-1.5"
+              >
+                <input
+                  type="text"
+                  name="newSubtask"
+                  placeholder="Novo sub-tópico (ex: Ler pág. 1-20, Responder 10 questões...)"
+                  className="flex-1 text-xs px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded font-sans text-zinc-800 placeholder-zinc-400 focus:outline-hidden focus:border-zinc-900 focus:bg-white transition-all"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1 bg-zinc-950 text-white text-xs font-semibold rounded hover:bg-black transition-colors cursor-pointer"
+                >
+                  Adicionar
+                </button>
+              </form>
+
+              {/* Sub-tópicos List */}
+              {ponto.subTopicos && ponto.subTopicos.length > 0 ? (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pt-1">
+                  {ponto.subTopicos.map(st => (
+                    <div 
+                      key={st.id} 
+                      className="flex items-center justify-between gap-2 p-1.5 bg-zinc-50/60 hover:bg-zinc-50 border border-zinc-150/50 rounded-md transition-all"
+                    >
+                      <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={st.concluido}
+                          onChange={() => {
+                            const updatedList = ponto.subTopicos?.map(item => 
+                              item.id === st.id ? { ...item, concluido: !item.concluido } : item
+                            ) || [];
+                            onUpdate({ subTopicos: updatedList });
+                          }}
+                          className="w-3.5 h-3.5 rounded-sm border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                        />
+                        <span className={`text-xs text-zinc-700 truncate ${st.concluido ? 'line-through text-zinc-400' : ''}`}>
+                          {st.titulo}
+                        </span>
+                      </label>
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updatedList = ponto.subTopicos?.filter(item => item.id !== st.id) || [];
+                          onUpdate({ subTopicos: updatedList });
+                        }}
+                        className="p-1 text-zinc-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                        title="Remover sub-tópico"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 bg-zinc-50/30 border border-dashed border-zinc-200 rounded-md">
+                  <p className="text-[11px] text-zinc-400">Nenhum sub-tópico cadastrado. Adicione tarefas para dividir o estudo!</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Quick Controls on Hover */}
@@ -431,16 +583,6 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
               title="Descer na ordem lógica"
             >
               <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {onDuplicate && (
-            <button
-              onClick={onDuplicate}
-              className="p-1 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded transition-colors"
-              title="Duplicar para revisão"
-            >
-              <Layers className="w-3.5 h-3.5" />
             </button>
           )}
 

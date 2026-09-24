@@ -78,10 +78,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const pointsByDate = useMemo(() => {
     const map: Record<string, PontoEstudo[]> = {};
     (pontos || []).forEach(p => {
-      if (p.data) {
-        if (!map[p.data]) map[p.data] = [];
-        map[p.data].push(p);
-      }
+      const scheduleDates = p.datas && p.datas.length > 0 ? p.datas : [p.data];
+      scheduleDates.forEach(dateStr => {
+        if (dateStr) {
+          if (!map[dateStr]) map[dateStr] = [];
+          if (!map[dateStr].some(existing => existing.id === p.id)) {
+            map[dateStr].push(p);
+          }
+        }
+      });
     });
     // Sort each day's points by logical ordem
     Object.keys(map).forEach(date => {
@@ -337,48 +342,63 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       </button>
                     </div>
 
-                    {/* Study Points inside this Day - Fitted naturally without any scrollbar */}
-                    <div className="space-y-2 flex-1">
-                      {pointsOnThisDay.map(p => {
-                        const spineColor = materiasCores[p.materia] || '#8C1C2C';
-                        const isDone = p.lido && p.qFeitas;
+                      {/* Study Points inside this Day - Fitted naturally without any scrollbar */}
+                      <div className="space-y-2 flex-1">
+                        {pointsOnThisDay.map(p => {
+                          const spineColor = materiasCores[p.materia] || '#8C1C2C';
+                          const isDone = p.lido && p.qFeitas;
 
-                        return (
-                          <div
-                            key={p.id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, p.id)}
-                            onClick={() => onSelectPonto(p)}
-                            className={`p-2.5 rounded-lg border text-left cursor-grab active:cursor-grabbing transition-all shadow-2xs ${
-                              isDone
-                                ? 'bg-zinc-50/90 border-zinc-200/80 opacity-70'
-                                : 'bg-white hover:bg-zinc-50/90 border-zinc-200 hover:border-zinc-300'
-                            }`}
-                            title="Clique para detalhes ou arraste para reagendar para outro dia"
-                          >
-                            {/* Subject & Type header */}
-                            <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span
-                                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                                  style={{ backgroundColor: spineColor }}
-                                />
-                                <span
-                                  className="font-bold text-[11px] uppercase tracking-wide truncate"
-                                  style={{ color: spineColor }}
-                                >
-                                  {p.materia}
-                                </span>
+                          const getPontoPartString = () => {
+                            if (!p.datas || p.datas.length <= 1) return '';
+                            const idx = p.datas.indexOf(dateStr);
+                            if (idx !== -1) {
+                              return `${idx + 1}/${p.datas.length}`;
+                            }
+                            return '';
+                          };
+                          const partStr = getPontoPartString();
+
+                          return (
+                            <div
+                              key={p.id}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, p.id)}
+                              onClick={() => onSelectPonto(p)}
+                              className={`p-2.5 rounded-lg border text-left cursor-grab active:cursor-grabbing transition-all shadow-2xs ${
+                                isDone
+                                  ? 'bg-zinc-50/90 border-zinc-200/80 opacity-70'
+                                  : 'bg-white hover:bg-zinc-50/90 border-zinc-200 hover:border-zinc-300'
+                              }`}
+                              title="Clique para detalhes ou arraste para reagendar para outro dia"
+                            >
+                              {/* Subject & Type header */}
+                              <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                                    style={{ backgroundColor: spineColor }}
+                                  />
+                                  <span
+                                    className="font-bold text-[11px] uppercase tracking-wide truncate"
+                                    style={{ color: spineColor }}
+                                  >
+                                    {p.materia}
+                                  </span>
+                                </div>
+                                {renderTipoBadge(p.tipoEstudo)}
                               </div>
-                              {renderTipoBadge(p.tipoEstudo)}
-                            </div>
 
-                            {/* Full Topic Title */}
-                            <div className={`font-medium text-xs text-zinc-900 leading-snug ${
-                              isDone ? 'line-through text-zinc-400' : ''
-                            }`}>
-                              {p.titulo}
-                            </div>
+                              {/* Full Topic Title */}
+                              <div className={`font-medium text-xs text-zinc-900 leading-snug flex items-center flex-wrap gap-1 ${
+                                isDone ? 'line-through text-zinc-400' : ''
+                              }`}>
+                                <span>{p.titulo}</span>
+                                {partStr && (
+                                  <span className="inline-flex items-center text-[9px] font-sans font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-1 py-0.2 rounded-xs">
+                                    {partStr}
+                                  </span>
+                                )}
+                              </div>
 
                             {/* Quick Status toggles with icon-first compact styling */}
                             <div className="flex items-center justify-between gap-1.5 mt-2 pt-2 border-t border-zinc-100 text-[10px]">

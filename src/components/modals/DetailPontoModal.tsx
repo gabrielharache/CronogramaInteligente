@@ -12,6 +12,7 @@ interface DetailPontoModalProps {
   onDeletePonto: (id: string) => void;
   onEditPonto: (ponto: PontoEstudo) => void;
   onDuplicatePonto?: (ponto: PontoEstudo) => void;
+  onSplitPonto?: (ponto: PontoEstudo) => void;
   onStartFocus?: (ponto: PontoEstudo) => void;
 }
 
@@ -24,6 +25,7 @@ export const DetailPontoModal: React.FC<DetailPontoModalProps> = ({
   onDeletePonto,
   onEditPonto,
   onDuplicatePonto,
+  onSplitPonto,
   onStartFocus
 }) => {
   if (!isOpen || !ponto) return null;
@@ -61,6 +63,10 @@ export const DetailPontoModal: React.FC<DetailPontoModalProps> = ({
             }}
             onDuplicate={onDuplicatePonto ? () => {
               onDuplicatePonto(ponto);
+              onClose();
+            } : undefined}
+            onSplit={onSplitPonto ? () => {
+              onSplitPonto(ponto);
               onClose();
             } : undefined}
             onStartFocus={onStartFocus ? () => {

@@ -10,6 +10,7 @@ interface SubjectGroupViewProps {
   onDeletePonto: (id: string) => void;
   onEditPonto: (ponto: PontoEstudo) => void;
   onDuplicatePonto: (ponto: PontoEstudo) => void;
+  onSplitPonto?: (ponto: PontoEstudo) => void;
   onNovoPontoNaMateria: (materia: string) => void;
   onMovePonto?: (id: string, direction: 'up' | 'down') => void;
   onStartFocus?: (ponto: PontoEstudo) => void;
@@ -25,6 +26,7 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
   onDeletePonto,
   onEditPonto,
   onDuplicatePonto,
+  onSplitPonto,
   onNovoPontoNaMateria,
   onMovePonto,
   onStartFocus,
@@ -266,6 +268,7 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
                     onDelete={() => onDeletePonto(ponto.id)}
                     onEdit={() => onEditPonto(ponto)}
                     onDuplicate={() => onDuplicatePonto(ponto)}
+                    onSplit={onSplitPonto ? () => onSplitPonto(ponto) : undefined}
                     onMoveUp={idx > 0 ? () => onMovePonto?.(ponto.id, 'up') : undefined}
                     onMoveDown={idx < items.length - 1 ? () => onMovePonto?.(ponto.id, 'down') : undefined}
                     onStartFocus={onStartFocus ? () => onStartFocus(ponto) : undefined}

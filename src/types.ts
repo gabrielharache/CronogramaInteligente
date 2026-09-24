@@ -2,6 +2,12 @@ export type Dificuldade = 'facil' | 'medio' | 'dificil' | null;
 
 export type TipoEstudo = 'doutrina' | 'lei_seca' | 'jurisprudencia';
 
+export interface SubTopico {
+  id: string;
+  titulo: string;
+  concluido: boolean;
+}
+
 export interface Cronograma {
   id: string;
   nome: string;
@@ -16,6 +22,7 @@ export interface PontoEstudo {
   id: string;
   cronogramaId?: string; // ID of the schedule it belongs to
   data: string; // YYYY-MM-DD
+  datas?: string[]; // Array of YYYY-MM-DD dates for split study points
   materia: string;
   titulo: string;
   tipoEstudo?: TipoEstudo; // 'doutrina' | 'lei_seca' | 'jurisprudencia'
@@ -28,7 +35,9 @@ export interface PontoEstudo {
   qAcertos: number | "";
   dif: Dificuldade;
   showNotes?: boolean;
+  showChecklist?: boolean;
   ordem?: number; // Ordem lógica / sequência pedagógica no edital
+  subTopicos?: SubTopico[];
   createdAt?: number;
   updatedAt?: number;
 }
