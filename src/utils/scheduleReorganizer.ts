@@ -104,9 +104,7 @@ export function loadReorganizePresets(): ReorganizePreset[] {
       return builtIns;
     }
 
-    // Merge: ensure builtIns exist and preserve user saved presets
-    const customPresets = parsed.filter((p: ReorganizePreset) => !p.isBuiltIn);
-    return [...builtIns, ...customPresets];
+    return parsed;
   } catch (err) {
     console.error('Erro ao carregar presets de reorganização:', err);
     return getDefaultBuiltInPresets();

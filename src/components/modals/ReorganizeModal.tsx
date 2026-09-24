@@ -8,7 +8,8 @@ import {
   ScheduledWeekSummary,
   ReorganizePreset,
   loadReorganizePresets,
-  saveReorganizePresetsToStorage
+  saveReorganizePresetsToStorage,
+  getDefaultBuiltInPresets
 } from '../../utils/scheduleReorganizer';
 import { 
   X, 
@@ -429,7 +430,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
 
   const handleDeletePreset = (presetId: string) => {
     const target = presets.find(p => p.id === presetId);
-    if (!target || target.isBuiltIn) return;
+    if (!target) return;
 
     const updated = presets.filter(p => p.id !== presetId);
     setPresets(updated);
@@ -442,6 +443,18 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     }
     setPresetToDelete(null);
     showFeedback(`Preset "${target.nome}" excluído.`, 'info');
+  };
+
+  const handleRestoreDefaultPresets = () => {
+    const defaults = getDefaultBuiltInPresets();
+    const customOnes = presets.filter(p => !p.isBuiltIn);
+    const merged = [...defaults, ...customOnes];
+    setPresets(merged);
+    saveReorganizePresetsToStorage(merged);
+    if (merged.length > 0) {
+      handleSelectPreset(merged[0]);
+    }
+    showFeedback("Presets padrões restaurados!", "info");
   };
 
   // Reordering functions
@@ -1095,29 +1108,19 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   {/* Actions: Atualizar, Salvar Novo, Gerenciar */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {!activePreset?.isBuiltIn ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleUpdateCurrentPreset}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                            isPresetModified
-                              ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 border-amber-400 shadow-xs'
-                              : 'bg-white hover:bg-zinc-50 text-zinc-700 border-zinc-200'
-                          }`}
-                          title="Sobrescrever este preset com as configurações da tela"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isPresetModified ? 'text-zinc-950' : 'text-zinc-500'}`} />
-                          <span>Atualizar Preset</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPresetToDelete(activePreset)}
-                          className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-zinc-200 transition-colors cursor-pointer"
-                          title="Excluir este preset personalizado"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        onClick={handleUpdateCurrentPreset}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isPresetModified
+                            ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 border-amber-400 shadow-xs'
+                            : 'bg-white hover:bg-zinc-50 text-zinc-700 border-zinc-200'
+                        }`}
+                        title="Sobrescrever este preset com as configurações da tela"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isPresetModified ? 'text-zinc-950' : 'text-zinc-500'}`} />
+                        <span>Atualizar Preset</span>
+                      </button>
                     ) : (
                       isPresetModified && (
                         <button
@@ -1130,6 +1133,17 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                           <span>Salvar como Novo Preset</span>
                         </button>
                       )
+                    )}
+
+                    {activePreset && (
+                      <button
+                        type="button"
+                        onClick={() => setPresetToDelete(activePreset)}
+                        className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-zinc-200 transition-colors cursor-pointer"
+                        title="Excluir este preset"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
 
                     <button
@@ -1157,30 +1171,47 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   {presets.map(p => {
                     const isSelected = activePresetId === p.id;
                     return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleSelectPreset(p)}
-                        className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
-                          isSelected
-                            ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs ring-1 ring-zinc-900'
-                            : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
-                        }`}
-                        title={p.descricao || p.nome}
-                      >
-                        {p.isBuiltIn ? (
-                          p.id === 'builtin_concurseiro' ? <span>🎯</span> :
-                          p.id === 'builtin_uniforme' ? <span>⚖️</span> :
-                          p.id === 'builtin_intensivo' ? <span>⚡</span> :
-                          <span>📦</span>
-                        ) : (
-                          <span className="text-amber-400 font-bold">★</span>
-                        )}
-                        <span>{p.nome}</span>
-                        {isSelected && isPresetModified && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ml-0.5" />
-                        )}
-                      </button>
+                      <div key={p.id} className="relative group shrink-0 flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectPreset(p)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs ring-1 ring-zinc-900'
+                              : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                          } pr-7`}
+                          title={p.descricao || p.nome}
+                        >
+                          {p.isBuiltIn ? (
+                            p.id === 'builtin_concurseiro' ? <span>🎯</span> :
+                            p.id === 'builtin_uniforme' ? <span>⚖️</span> :
+                            p.id === 'builtin_intensivo' ? <span>⚡</span> :
+                            <span>📦</span>
+                          ) : (
+                            <span className="text-amber-400 font-bold">★</span>
+                          )}
+                          <span>{p.nome}</span>
+                          {isSelected && isPresetModified && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ml-0.5" />
+                          )}
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPresetToDelete(p);
+                          }}
+                          className={`absolute right-1.5 p-1 rounded-md transition-all cursor-pointer ${
+                            isSelected
+                              ? 'text-zinc-400 hover:text-red-400 hover:bg-zinc-800'
+                              : 'text-zinc-400 hover:text-red-600 hover:bg-zinc-200'
+                          }`}
+                          title={p.isBuiltIn ? "Ocultar / Excluir preset padrão" : "Excluir preset personalizado"}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -2012,17 +2043,28 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 <span className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
                   Presets Disponíveis ({presets.length})
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManageModalOpen(false);
-                    handleOpenSaveModal();
-                  }}
-                  className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
-                >
-                  <BookmarkPlus className="w-3.5 h-3.5" />
-                  <span>Novo Preset</span>
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleRestoreDefaultPresets}
+                    className="text-xs font-bold text-zinc-500 hover:text-zinc-700 flex items-center gap-1.5 cursor-pointer"
+                    title="Restaurar presets padrões deletados"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Restaurar Padrões</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManageModalOpen(false);
+                      handleOpenSaveModal();
+                    }}
+                    className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    <BookmarkPlus className="w-3.5 h-3.5" />
+                    <span>Novo Preset</span>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2.5">
@@ -2089,8 +2131,8 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                           </span>
                         )}
 
-                        {!p.isBuiltIn && (
-                          <>
+                        <div className="flex items-center gap-1">
+                          {!p.isBuiltIn && (
                             <button
                               type="button"
                               onClick={() => handleUpdatePresetById(p.id)}
@@ -2099,16 +2141,16 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setPresetToDelete(p)}
-                              className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-zinc-200 transition-colors cursor-pointer"
-                              title="Excluir preset"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        )}
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setPresetToDelete(p)}
+                            className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-zinc-200 transition-colors cursor-pointer"
+                            title={p.isBuiltIn ? "Ocultar / Excluir preset padrão" : "Excluir preset"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
