@@ -72,17 +72,6 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       <div className="flex items-center justify-between border-b border-zinc-200">
         <div className="flex items-center gap-6">
           <button
-            onClick={() => onViewModeChange('semanal')}
-            className={`pb-2.5 text-sm font-semibold transition-all relative ${
-              viewMode === 'semanal'
-                ? 'text-zinc-900 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-zinc-900'
-                : 'text-zinc-500 hover:text-zinc-800'
-            }`}
-          >
-            Semanas
-          </button>
-
-          <button
             onClick={() => onViewModeChange('materias')}
             className={`pb-2.5 text-sm font-semibold transition-all relative ${
               viewMode === 'materias'
@@ -91,6 +80,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             }`}
           >
             Matérias
+          </button>
+
+          <button
+            onClick={() => onViewModeChange('semanal')}
+            className={`pb-2.5 text-sm font-semibold transition-all relative ${
+              viewMode === 'semanal'
+                ? 'text-zinc-900 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-zinc-900'
+                : 'text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            Semanas
           </button>
 
           <button
