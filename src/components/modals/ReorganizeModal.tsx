@@ -46,6 +46,8 @@ interface ReorganizeModalProps {
   activeCronograma?: Cronograma;
   materiasCores?: Record<string, string>;
   onApplyReorganize: (updatedPoints: PontoEstudo[]) => void;
+  globalMateriaOrder?: string[];
+  onUpdateMateriaOrder?: (order: string[]) => void;
 }
 
 const DIAS_OPTIONS = [
@@ -64,7 +66,9 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   pontos,
   activeCronograma,
   materiasCores = {},
-  onApplyReorganize
+  onApplyReorganize,
+  globalMateriaOrder,
+  onUpdateMateriaOrder
 }) => {
   const [startDate, setStartDate] = useState<string>(hojeStr());
   const [scope, setScope] = useState<'pending' | 'all'>('pending');
@@ -111,6 +115,20 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     }, 3500);
   };
 
+  const [selectedMateriasForReorg, setSelectedMateriasForReorg] = useState<string[]>([]);
+
+  const allAvailableMaterias = useMemo(() => {
+    return Array.from(new Set(pontos.map(p => p.materia))).sort((a, b) => String(a).localeCompare(String(b), 'pt'));
+  }, [pontos]);
+
+  // Sync selectedMateriasForReorg when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const subjects = Array.from(new Set(pontos.map(p => p.materia))).sort((a, b) => String(a).localeCompare(String(b), 'pt'));
+      setSelectedMateriasForReorg(subjects);
+    }
+  }, [isOpen, pontos]);
+
   // Helper to check if a point is marked completed
   const isConcluido = (p: PontoEstudo) => Boolean(p.lido || (p.qFeitas && Number(p.qTotal) > 0));
 
@@ -122,13 +140,13 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     return pontos.filter(p => isConcluido(p)).length;
   }, [pontos]);
 
-  // Target points according to scope
+  // Target points according to scope and selected subjects
   const targetPoints = useMemo(() => {
-    if (scope === 'pending') {
-      return pontos.filter(p => !isConcluido(p));
-    }
-    return [...pontos];
-  }, [pontos, scope]);
+    const base = scope === 'pending'
+      ? pontos.filter(p => !isConcluido(p))
+      : [...pontos];
+    return base.filter(p => selectedMateriasForReorg.includes(p.materia));
+  }, [pontos, scope, selectedMateriasForReorg]);
 
   // Active study days array
   const activeStudyDays = useMemo(() => {
@@ -162,6 +180,20 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       });
 
       setPointsByMateria(grouped);
+
+      // Sort order by globalMateriaOrder if available
+      if (globalMateriaOrder && globalMateriaOrder.length > 0) {
+        const orderMap = new Map<string, number>(globalMateriaOrder.map((m, idx) => [m, idx]));
+        order.sort((a, b) => {
+          const idxA = orderMap.has(a) ? orderMap.get(a)! : 9999;
+          const idxB = orderMap.has(b) ? orderMap.get(b)! : 9999;
+          if (idxA !== idxB) return idxA - idxB;
+          return a.localeCompare(b, 'pt');
+        });
+      } else {
+        order.sort((a, b) => a.localeCompare(b, 'pt'));
+      }
+
       setMateriaOrder(order);
 
       // Default smart configs: top subjects get 'toda_semana', others get 'intercalada'
@@ -428,6 +460,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     nextOrder[idx] = nextOrder[swapWith];
     nextOrder[swapWith] = temp;
     setMateriaOrder(nextOrder);
+    onUpdateMateriaOrder?.(nextOrder);
     setIsPresetModified(true);
   };
 
@@ -522,6 +555,14 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       };
     }
 
+    // Determine occupied count by date for unselected subjects
+    const occupiedCountByDate: Record<string, number> = {};
+    pontos.forEach(p => {
+      if (!selectedMateriasForReorg.includes(p.materia) && p.data) {
+        occupiedCountByDate[p.data] = (occupiedCountByDate[p.data] || 0) + 1;
+      }
+    });
+
     return calculateSmartSchedule(pointsByMateria, {
       startDate,
       topicsPerDay,
@@ -529,7 +570,8 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       distributionMode,
       materiaConfigs,
       materiaOrder,
-      avoidSameSubjectPerDay
+      avoidSameSubjectPerDay,
+      occupiedCountByDate
     });
   }, [
     startDate,
@@ -540,7 +582,9 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     distributionMode,
     materiaConfigs,
     materiaOrder,
-    avoidSameSubjectPerDay
+    avoidSameSubjectPerDay,
+    pontos,
+    selectedMateriasForReorg
   ]);
 
   const { orderedPoints, calculatedDates, weeksSummary, endDate } = calculationResult;
@@ -587,10 +631,22 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       updatedAt: Date.now()
     }));
 
-    // Preserve completed / omitted topics as agreed
+    const selectedSubjects = selectedMateriasForReorg;
+    const finalPoints: PontoEstudo[] = [];
+
+    // For unselected subjects, we just copy them from the original 'pontos' array without any modification!
+    const unselectedSubjects = Array.from(new Set(pontos.map(p => p.materia)))
+      .filter(m => !selectedSubjects.includes(m));
+    
+    unselectedSubjects.forEach(materia => {
+      const originalSubjectPoints = pontos.filter(p => p.materia === materia);
+      finalPoints.push(...originalSubjectPoints);
+    });
+
+    // Only omit topics of SELECTED subjects if they weren't scheduled
     const orderedIds = new Set(orderedPoints.map(p => p.id));
     const omittedPoints = pontos
-      .filter(p => !orderedIds.has(p.id))
+      .filter(p => selectedSubjects.includes(p.materia) && !orderedIds.has(p.id))
       .map(p => ({
         ...p,
         data: '', // Taken off calendar, preserved in materias tab
@@ -600,10 +656,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     const updatedPointsMap = new Map(updatedPoints.map(p => [p.id, p]));
     const omittedPointsMap = new Map(omittedPoints.map(p => [p.id, p]));
 
-    const finalPoints: PontoEstudo[] = [];
-    const subjectsInSchedule = Array.from(new Set(pontos.map(p => p.materia)));
-
-    subjectsInSchedule.forEach(materia => {
+    selectedSubjects.forEach(materia => {
       // Completed / omitted topics of this subject
       const subjectOmitted = omittedPoints
         .filter(p => p.materia === materia)
@@ -860,6 +913,90 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 </span>
               </label>
             )}
+
+            {/* Subject Selection for Reorganization */}
+            <div className="border-t border-zinc-100 pt-3.5 space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-zinc-800 uppercase tracking-wider">
+                    Matérias para Reorganizar
+                  </label>
+                  <p className="text-[11px] text-zinc-500">
+                    Selecione quais matérias serão redistribuídas. As desmarcadas não sofrerão nenhuma alteração no calendário.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMateriasForReorg(allAvailableMaterias)}
+                    className="px-2 py-1 text-[10px] font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded transition-colors cursor-pointer"
+                  >
+                    Selecionar Todas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMateriasForReorg([])}
+                    className="px-2 py-1 text-[10px] font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded transition-colors cursor-pointer"
+                  >
+                    Desmarcar Todas
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-1 no-scrollbar">
+                {allAvailableMaterias.map(materia => {
+                  const isSelected = selectedMateriasForReorg.includes(materia);
+                  const cor = materiasCores[materia] || '#d97706';
+                  const totalCount = pontos.filter(p => p.materia === materia).length;
+                  const pendingCount = pontos.filter(p => p.materia === materia && !isConcluido(p)).length;
+
+                  return (
+                    <button
+                      key={materia}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedMateriasForReorg(prev => prev.filter(m => m !== materia));
+                        } else {
+                          setSelectedMateriasForReorg(prev => [...prev, materia]);
+                        }
+                      }}
+                      className={`flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-zinc-50 border-zinc-300 shadow-2xs hover:bg-zinc-100'
+                          : 'bg-zinc-100/50 border-zinc-200 opacity-60 hover:opacity-85'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}} // Handled by button click
+                          className="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 h-3.5 w-3.5 shrink-0 cursor-pointer"
+                        />
+                        <span 
+                          className="w-2 h-2 rounded-full shrink-0" 
+                          style={{ backgroundColor: cor }} 
+                        />
+                        <span className="text-xs font-semibold text-zinc-900 truncate">
+                          {materia}
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0 pl-2 flex flex-col justify-center">
+                        <span className="text-[10px] font-mono text-zinc-500 font-bold">
+                          {pendingCount}/{totalCount}
+                        </span>
+                        {!isSelected && (
+                          <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-tight leading-none mt-0.5">
+                            Fixa
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Feedback banner */}

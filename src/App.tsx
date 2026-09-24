@@ -339,8 +339,19 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     const fromPoints = activeSchedulePoints.map(p => p.materia);
     const fromColors = Object.keys(state?.materiasCores || {});
     const set = new Set([...fromPoints, ...fromColors]);
-    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b, 'pt'));
-  }, [activeSchedulePoints, state?.materiasCores]);
+    const list = Array.from(set).filter(Boolean);
+
+    if (state.materiaOrder && state.materiaOrder.length > 0) {
+      const orderMap = new Map<string, number>(state.materiaOrder.map((m, idx) => [m, idx]));
+      return list.sort((a, b) => {
+        const idxA = orderMap.has(a) ? orderMap.get(a)! : 9999;
+        const idxB = orderMap.has(b) ? orderMap.get(b)! : 9999;
+        if (idxA !== idxB) return idxA - idxB;
+        return a.localeCompare(b, 'pt');
+      });
+    }
+    return list.sort((a, b) => a.localeCompare(b, 'pt'));
+  }, [activeSchedulePoints, state?.materiasCores, state.materiaOrder]);
 
   // Subject counts
   const materiasCounts = useMemo(() => {
@@ -518,6 +529,31 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
       const nextPontos = prev.pontos.map(p => {
         if (ordemMap.has(p.id)) {
+          return {
+            ...p,
+            ordem: ordemMap.get(p.id)!,
+            updatedAt: Date.now()
+          };
+        }
+        return p;
+      });
+
+      return {
+        ...prev,
+        pontos: nextPontos
+      };
+    });
+  }, []);
+
+  const handleReorderPontos = useCallback((materia: string, cronogramaId: string | undefined, orderedIds: string[]) => {
+    setState(prev => {
+      const ordemMap = new Map<string, number>();
+      orderedIds.forEach((id, index) => {
+        ordemMap.set(id, index + 1);
+      });
+
+      const nextPontos = prev.pontos.map(p => {
+        if (p.materia === materia && (cronogramaId === undefined || p.cronogramaId === cronogramaId) && ordemMap.has(p.id)) {
           return {
             ...p,
             ordem: ordemMap.get(p.id)!,
@@ -1388,6 +1424,9 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
                     }}
                     onMovePonto={handleMovePonto}
                     onStartFocus={handleStartFocus}
+                    materiaOrder={state.materiaOrder}
+                    onUpdateMateriaOrder={(newOrder) => setState(prev => ({ ...prev, materiaOrder: newOrder }))}
+                    onReorderPontos={handleReorderPontos}
                   />
                 )}
               </div>
@@ -1607,6 +1646,8 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         activeCronograma={activeCronogramaObj}
         materiasCores={state.materiasCores}
         onApplyReorganize={handleApplyReorganize}
+        globalMateriaOrder={state.materiaOrder}
+        onUpdateMateriaOrder={(newOrder) => setState(prev => ({ ...prev, materiaOrder: newOrder }))}
       />
 
       <SubjectManagerModal

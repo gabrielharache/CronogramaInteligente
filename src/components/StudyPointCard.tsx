@@ -21,7 +21,8 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
-  Play
+  Play,
+  GripVertical
 } from 'lucide-react';
 
 interface StudyPointCardProps {
@@ -34,6 +35,14 @@ interface StudyPointCardProps {
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onStartFocus?: () => void;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
+  dragHandleProps?: {
+    onMouseEnter: () => void;
+    onMouseLeave: () => void;
+  };
 }
 
 export const StudyPointCard: React.FC<StudyPointCardProps> = ({
@@ -45,7 +54,12 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
   onDuplicate,
   onMoveUp,
   onMoveDown,
-  onStartFocus
+  onStartFocus,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  dragHandleProps
 }) => {
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [isEditingQuestions, setIsEditingQuestions] = useState(false);
@@ -104,11 +118,24 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
 
   return (
     <div 
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
       className={`group relative py-3.5 px-4 sm:px-5 hover:bg-zinc-50/70 transition-colors border-b border-zinc-100 last:border-b-0 ${
         isConcluido ? 'bg-zinc-50/40' : ''
       }`}
     >
-      <div className="flex items-start gap-3 sm:gap-4">
+      <div className="flex items-start gap-2.5 sm:gap-3.5">
+        {dragHandleProps && (
+          <div
+            {...dragHandleProps}
+            className="p-1 cursor-grab active:cursor-grabbing text-zinc-300 hover:text-zinc-600 rounded-md hover:bg-zinc-100 transition-colors shrink-0 mt-0.5"
+          >
+            <GripVertical className="w-4 h-4" />
+          </div>
+        )}
+
         {/* Left Day Indicator */}
         <div className="w-12 sm:w-14 shrink-0 text-left pt-0.5">
           {ponto.data ? (
@@ -321,6 +348,19 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
             >
               {ponto.showNotes ? 'Fechar anotação' : 'Anotar'}
             </button>
+
+            {onDuplicate && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={onDuplicate}
+                  className="hover:text-zinc-800 hover:underline cursor-pointer transition-colors"
+                  title="Duplicar para revisão"
+                >
+                  Duplicar
+                </button>
+              </>
+            )}
 
             {onStartFocus && (
               <>

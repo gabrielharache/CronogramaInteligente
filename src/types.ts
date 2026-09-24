@@ -94,6 +94,7 @@ export interface AppState {
   materiasCores: Record<string, string>;
   gradeSemanal?: BlocoHorario[];
   sessoesEstudo?: SessaoEstudo[];
+  materiaOrder?: string[];
   ui: {
     view: ViewMode;
     calMes?: string; // YYYY-MM

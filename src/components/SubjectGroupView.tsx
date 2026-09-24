@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PontoEstudo } from '../types';
 import { StudyPointCard } from './StudyPointCard';
-import { ChevronDown, ChevronUp, BookOpen, Target, Award, Plus } from 'lucide-react';
+import { ChevronDown, ChevronUp, BookOpen, Target, Award, Plus, GripVertical } from 'lucide-react';
 
 interface SubjectGroupViewProps {
   pontos: PontoEstudo[];
@@ -13,6 +13,9 @@ interface SubjectGroupViewProps {
   onNovoPontoNaMateria: (materia: string) => void;
   onMovePonto?: (id: string, direction: 'up' | 'down') => void;
   onStartFocus?: (ponto: PontoEstudo) => void;
+  materiaOrder?: string[];
+  onUpdateMateriaOrder?: (newOrder: string[]) => void;
+  onReorderPontos?: (materia: string, cronogramaId: string | undefined, orderedIds: string[]) => void;
 }
 
 export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
@@ -24,7 +27,10 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
   onDuplicatePonto,
   onNovoPontoNaMateria,
   onMovePonto,
-  onStartFocus
+  onStartFocus,
+  materiaOrder,
+  onUpdateMateriaOrder,
+  onReorderPontos
 }) => {
   // Group points by subject
   const grouped: Record<string, PontoEstudo[]> = {};
@@ -33,11 +39,87 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
     grouped[p.materia].push(p);
   });
 
-  const subjectNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'pt'));
+  const subjectNames = useMemo(() => {
+    const rawNames = Object.keys(grouped);
+    if (materiaOrder && materiaOrder.length > 0) {
+      const orderMap = new Map<string, number>(materiaOrder.map((m, idx) => [m, idx]));
+      return [...rawNames].sort((a, b) => {
+        const idxA = orderMap.has(a) ? orderMap.get(a)! : 9999;
+        const idxB = orderMap.has(b) ? orderMap.get(b)! : 9999;
+        if (idxA !== idxB) return idxA - idxB;
+        return a.localeCompare(b, 'pt');
+      });
+    }
+    return [...rawNames].sort((a, b) => a.localeCompare(b, 'pt'));
+  }, [grouped, materiaOrder]);
+
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  // Drag and drop states
+  const [draggedSubject, setDraggedSubject] = useState<string | null>(null);
+  const [dragEnabledSubject, setDragEnabledSubject] = useState<string | null>(null);
+
+  const [draggedTopicId, setDraggedTopicId] = useState<string | null>(null);
+  const [dragEnabledTopic, setDragEnabledTopic] = useState<string | null>(null);
 
   const toggleSubject = (materia: string) => {
     setCollapsed(prev => ({ ...prev, [materia]: !prev[materia] }));
+  };
+
+  // Subject drag-and-drop handlers
+  const handleSubjectDragStart = (e: React.DragEvent, materia: string) => {
+    setDraggedSubject(materia);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleSubjectDragOver = (e: React.DragEvent, targetMateria: string) => {
+    e.preventDefault();
+    if (!draggedSubject || draggedSubject === targetMateria) return;
+
+    const currentIndex = subjectNames.indexOf(draggedSubject);
+    const targetIndex = subjectNames.indexOf(targetMateria);
+    if (currentIndex !== -1 && targetIndex !== -1) {
+      const newOrder = [...subjectNames];
+      newOrder.splice(currentIndex, 1);
+      newOrder.splice(targetIndex, 0, draggedSubject);
+      onUpdateMateriaOrder?.(newOrder);
+    }
+  };
+
+  const handleSubjectDragEnd = () => {
+    setDraggedSubject(null);
+    setDragEnabledSubject(null);
+  };
+
+  // Topic drag-and-drop handlers
+  const handleTopicDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedTopicId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleTopicDragOver = (e: React.DragEvent, targetId: string, targetMateria: string, siblingItems: PontoEstudo[]) => {
+    e.preventDefault();
+    if (!draggedTopicId) return;
+
+    const draggedPonto = pontos.find(p => p.id === draggedTopicId);
+    if (!draggedPonto || draggedPonto.materia !== targetMateria) return;
+
+    const currentIndex = siblingItems.findIndex(p => p.id === draggedTopicId);
+    const targetIndex = siblingItems.findIndex(p => p.id === targetId);
+
+    if (currentIndex !== -1 && targetIndex !== -1 && currentIndex !== targetIndex) {
+      const nextItems = [...siblingItems];
+      const [removed] = nextItems.splice(currentIndex, 1);
+      nextItems.splice(targetIndex, 0, removed);
+      
+      const orderedIds = nextItems.map(p => p.id);
+      onReorderPontos?.(targetMateria, draggedPonto.cronogramaId, orderedIds);
+    }
+  };
+
+  const handleTopicDragEnd = () => {
+    setDraggedTopicId(null);
+    setDragEnabledTopic(null);
   };
 
   if (subjectNames.length === 0) {
@@ -83,20 +165,36 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
         return (
           <div 
             key={materia}
-            className="bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-2xs"
+            draggable={dragEnabledSubject === materia}
+            onDragStart={(e) => handleSubjectDragStart(e, materia)}
+            onDragOver={(e) => handleSubjectDragOver(e, materia)}
+            onDragEnd={handleSubjectDragEnd}
+            className={`bg-white border rounded-xl overflow-hidden shadow-2xs transition-all duration-100 ${
+              draggedSubject === materia ? 'opacity-40 border-dashed border-zinc-400 bg-zinc-50/50' : 'border-zinc-200'
+            }`}
           >
             {/* Subject Accordion Header */}
             <div 
               className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer bg-white hover:bg-zinc-50 border-b border-zinc-100 transition-colors"
               onClick={() => toggleSubject(materia)}
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
+                {/* Drag Handle for Subject */}
+                <div
+                  className="p-1 cursor-grab active:cursor-grabbing text-zinc-400 hover:text-zinc-600 rounded-md hover:bg-zinc-100 transition-colors shrink-0"
+                  onMouseEnter={() => setDragEnabledSubject(materia)}
+                  onMouseLeave={() => setDragEnabledSubject(null)}
+                  onClick={(e) => e.stopPropagation()} // Prevent accordion toggle
+                >
+                  <GripVertical className="w-4 h-4" />
+                </div>
+
                 <span 
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: color }}
                 />
                 <div>
-                  <h3 className="font-sans font-semibold text-base sm:text-lg text-zinc-900">
+                  <h3 className="font-sans font-semibold text-base sm:text-lg text-zinc-900 flex items-center gap-1.5">
                     {materia}
                   </h3>
                   <p className="text-xs text-zinc-500 font-mono">
@@ -171,6 +269,14 @@ export const SubjectGroupView: React.FC<SubjectGroupViewProps> = ({
                     onMoveUp={idx > 0 ? () => onMovePonto?.(ponto.id, 'up') : undefined}
                     onMoveDown={idx < items.length - 1 ? () => onMovePonto?.(ponto.id, 'down') : undefined}
                     onStartFocus={onStartFocus ? () => onStartFocus(ponto) : undefined}
+                    draggable={dragEnabledTopic === ponto.id}
+                    onDragStart={(e) => handleTopicDragStart(e, ponto.id)}
+                    onDragOver={(e) => handleTopicDragOver(e, ponto.id, materia, items)}
+                    onDragEnd={handleTopicDragEnd}
+                    dragHandleProps={{
+                      onMouseEnter: () => setDragEnabledTopic(ponto.id),
+                      onMouseLeave: () => setDragEnabledTopic(null)
+                    }}
                   />
                 ))}
               </div>

@@ -320,6 +320,8 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
 
   const editais: Edital[] = Array.isArray(parsed.editais) ? parsed.editais : [];
 
+  const materiaOrder: string[] | undefined = Array.isArray(parsed.materiaOrder) ? parsed.materiaOrder : undefined;
+
   const gradeSemanal: BlocoHorario[] = Array.isArray(parsed.gradeSemanal)
     ? parsed.gradeSemanal
     : (fallbackToEmpty ? [] : getDefaultGradeSemanal());
@@ -344,6 +346,7 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
     materiasCores,
     gradeSemanal,
     sessoesEstudo,
+    materiaOrder,
     ui,
     migs: ['v4-user-isolated', 'v5-weekly-focus']
   };

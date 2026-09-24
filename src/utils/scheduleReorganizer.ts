@@ -129,6 +129,7 @@ export interface ReorganizeScheduleOptions {
   materiaConfigs: Record<string, MateriaReorgConfig>;
   materiaOrder: string[]; // Array of subject names in priority sequence
   avoidSameSubjectPerDay?: boolean;
+  occupiedCountByDate?: Record<string, number>;
 }
 
 export interface ScheduledDayItem {
@@ -185,7 +186,8 @@ export function calculateSmartSchedule(
     distributionMode,
     materiaConfigs,
     materiaOrder,
-    avoidSameSubjectPerDay = true
+    avoidSameSubjectPerDay = true,
+    occupiedCountByDate = {}
   } = options;
 
   // Deep clone subject topic queues so we can consume them
@@ -214,7 +216,7 @@ export function calculateSmartSchedule(
       flatList.push(...(queues[mat] || []));
     });
 
-    const dates = generateDatesList(flatList.length, startDate, topicsPerDay, studyDays);
+    const dates = generateDatesList(flatList.length, startDate, topicsPerDay, studyDays, occupiedCountByDate);
     const updatedPoints = flatList.map((p, i) => ({ ...p, data: dates[i] }));
     const weeks = buildWeeksSummary(updatedPoints);
 
@@ -246,7 +248,7 @@ export function calculateSmartSchedule(
       topicIdx++;
     }
 
-    const dates = generateDatesList(flatList.length, startDate, topicsPerDay, studyDays);
+    const dates = generateDatesList(flatList.length, startDate, topicsPerDay, studyDays, occupiedCountByDate);
     const updatedPoints = flatList.map((p, i) => ({ ...p, data: dates[i] }));
     const weeks = buildWeeksSummary(updatedPoints);
 
@@ -296,11 +298,14 @@ export function calculateSmartSchedule(
 
       // Must be >= startDate and in studyDays
       if (dateStr >= startDate && studyDays.includes(dayOfWeek)) {
-        weekStudyDays.push({
-          dateStr,
-          dateObj: checkDay,
-          dayOfWeek
-        });
+        const occupied = occupiedCountByDate[dateStr] || 0;
+        if (occupied < topicsPerDay) {
+          weekStudyDays.push({
+            dateStr,
+            dateObj: checkDay,
+            dayOfWeek
+          });
+        }
       }
     }
 
@@ -355,7 +360,10 @@ export function calculateSmartSchedule(
     });
 
     // Total slots available in this week
-    const totalWeeklySlots = weekStudyDays.length * topicsPerDay;
+    const totalWeeklySlots = weekStudyDays.reduce((acc, d) => {
+      const occupied = occupiedCountByDate[d.dateStr] || 0;
+      return acc + Math.max(0, topicsPerDay - occupied);
+    }, 0);
     let slotsFilledThisWeek = weekMateriaQuotas.reduce((acc, q) => acc + q.quota, 0);
 
     // If weekly quotas exceed weekly slots, scale down lowest priority quotas
@@ -418,7 +426,8 @@ export function calculateSmartSchedule(
       if (entry.fixedDays && entry.fixedDays.length > 0) {
         const matchingDays = weekStudyDays.filter(d => entry.fixedDays!.includes(d.dayOfWeek));
         for (const targetDay of matchingDays) {
-          if (entry.quota > 0 && dayAllocations[targetDay.dateStr].length < topicsPerDay) {
+          const occupied = occupiedCountByDate[targetDay.dateStr] || 0;
+          if (entry.quota > 0 && dayAllocations[targetDay.dateStr].length + occupied < topicsPerDay) {
             const topic = queues[entry.materia]?.shift();
             if (topic) {
               dayAllocations[targetDay.dateStr].push(topic);
@@ -463,15 +472,20 @@ export function calculateSmartSchedule(
       const topic = queues[mat]?.shift();
       if (!topic) return;
 
-      // Find best day: day with < topicsPerDay and without this subject
+      // Find best day: day with < topicsPerDay (including occupied) and without this subject
       let bestDay = weekStudyDays.find(d => {
         const currentList = dayAllocations[d.dateStr];
-        return currentList.length < topicsPerDay && (!avoidSameSubjectPerDay || !currentList.some(p => p.materia === mat));
+        const occupied = occupiedCountByDate[d.dateStr] || 0;
+        return currentList.length + occupied < topicsPerDay && (!avoidSameSubjectPerDay || !currentList.some(p => p.materia === mat));
       });
 
-      // Fallback: any day with < topicsPerDay
+      // Fallback: any day with < topicsPerDay (including occupied)
       if (!bestDay) {
-        bestDay = weekStudyDays.find(d => dayAllocations[d.dateStr].length < topicsPerDay);
+        bestDay = weekStudyDays.find(d => {
+          const currentList = dayAllocations[d.dateStr];
+          const occupied = occupiedCountByDate[d.dateStr] || 0;
+          return currentList.length + occupied < topicsPerDay;
+        });
       }
 
       if (bestDay) {
@@ -510,16 +524,26 @@ export function calculateSmartSchedule(
       const leftover = queues[mat] || [];
       while (leftover.length > 0) {
         const pt = leftover.shift()!;
-        // Pick next valid day
-        while (!studyDays.includes(currentDate.getDay())) {
+        // Pick next valid day with space
+        while (true) {
+          const dStr = formatDateISO(currentDate);
+          const isStudyDay = studyDays.includes(currentDate.getDay());
+          const occupied = occupiedCountByDate[dStr] || 0;
+          
+          // Let's count how many topics are already scheduled on currentDate in scheduledTopics
+          const scheduledTodayCount = scheduledTopics.filter(st => st.data === dStr).length;
+          
+          if (isStudyDay && (occupied + scheduledTodayCount < topicsPerDay)) {
+            break;
+          }
           currentDate.setDate(currentDate.getDate() + 1);
         }
+        
         const dStr = formatDateISO(currentDate);
         scheduledTopics.push({
           ponto: pt,
           data: dStr
         });
-        currentDate.setDate(currentDate.getDate() + 1);
       }
     });
   }
@@ -634,7 +658,8 @@ function generateDatesList(
   totalItems: number,
   startDate: string,
   topicsPerDay: number,
-  studyDays: number[]
+  studyDays: number[],
+  occupiedCountByDate: Record<string, number> = {}
 ): string[] {
   const dates: string[] = [];
   if (totalItems <= 0 || !startDate) return dates;
@@ -643,15 +668,24 @@ function generateDatesList(
   let itemsOnDay = 0;
 
   for (let i = 0; i < totalItems; i++) {
-    while (!studyDays.includes(current.getDay())) {
+    while (true) {
+      const dStr = formatDateISO(current);
+      const isStudyDay = studyDays.includes(current.getDay());
+      const occupiedThisDay = occupiedCountByDate[dStr] || 0;
+      
+      if (isStudyDay && (occupiedThisDay + itemsOnDay < topicsPerDay)) {
+        break; // Valid study day and has available slot(s)
+      }
       current.setDate(current.getDate() + 1);
       itemsOnDay = 0;
     }
 
-    dates.push(formatDateISO(current));
+    const dStr = formatDateISO(current);
+    dates.push(dStr);
     itemsOnDay++;
 
-    if (itemsOnDay >= topicsPerDay) {
+    const occupiedThisDay = occupiedCountByDate[dStr] || 0;
+    if (itemsOnDay + occupiedThisDay >= topicsPerDay) {
       current.setDate(current.getDate() + 1);
       itemsOnDay = 0;
     }
