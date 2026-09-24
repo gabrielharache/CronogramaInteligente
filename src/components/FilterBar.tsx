@@ -7,7 +7,13 @@ import {
   BookOpen, 
   Scale, 
   Landmark,
-  ChevronDown
+  ChevronDown,
+  Settings,
+  Trash2,
+  CalendarRange,
+  CalendarDays,
+  Layers,
+  Sliders
 } from 'lucide-react';
 
 interface FilterBarProps {
@@ -39,6 +45,9 @@ interface FilterBarProps {
   onNovoPonto: () => void;
   totalFiltrados: number;
   totalGeral: number;
+  onClearDates?: (scope: 'cronograma' | 'filtrados') => void;
+  onOpenReorganize?: () => void;
+  onOpenSubjectManager?: () => void;
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -64,8 +73,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onViewModeChange,
   onNovoPonto,
   totalFiltrados,
-  totalGeral
+  totalGeral,
+  onClearDates,
+  onOpenReorganize,
+  onOpenSubjectManager
 }) => {
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+
   return (
     <div className="space-y-4 mb-4">
       {/* 1. View Underline Tabs: Semanas | Matérias | Mês */}
@@ -105,14 +119,128 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           </button>
         </div>
 
-        {/* New Point button on right */}
-        <button
-          onClick={onNovoPonto}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-black text-white rounded shadow-2xs transition-colors mb-2"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Novo ponto</span>
-        </button>
+        {/* New Point button & Settings Gear on right */}
+        <div className="flex items-center gap-2 mb-2">
+          {/* Settings Menu Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className="inline-flex items-center justify-center p-2 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors cursor-pointer"
+              title="Opções e ferramentas do cronograma"
+            >
+              <Settings className={`w-4.5 h-4.5 transition-transform duration-200 ${isSettingsOpen ? 'rotate-45' : ''}`} />
+            </button>
+
+            {isSettingsOpen && (
+              <>
+                {/* Invisible overlay to close when clicking outside */}
+                <div className="fixed inset-0 z-40" onClick={() => setIsSettingsOpen(false)} />
+                
+                <div className="absolute right-0 mt-1.5 w-64 bg-white border border-zinc-200 rounded-lg shadow-xl py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-100 origin-top-right">
+                  <div className="px-3 py-1.5 border-b border-zinc-100">
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Ferramentas do Cronograma</p>
+                  </div>
+                  
+                  <div className="p-1 space-y-0.5">
+                    <button
+                      onClick={() => {
+                        setIsSettingsOpen(false);
+                        if (onClearDates) onClearDates('cronograma');
+                      }}
+                      className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 text-xs text-zinc-700 hover:bg-zinc-50 rounded-md transition-colors cursor-pointer"
+                    >
+                      <div className="p-1 bg-red-50 rounded text-red-600 mt-0.5">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-zinc-900">Limpar datas do cronograma</p>
+                        <p className="text-[10px] text-zinc-500">Remove o planejamento de datas deste cronograma</p>
+                      </div>
+                    </button>
+
+                    {totalFiltrados < totalGeral && (
+                      <button
+                        onClick={() => {
+                          setIsSettingsOpen(false);
+                          if (onClearDates) onClearDates('filtrados');
+                        }}
+                        className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 text-xs text-zinc-700 hover:bg-zinc-50 rounded-md transition-colors cursor-pointer"
+                      >
+                        <div className="p-1 bg-amber-50 rounded text-amber-600 mt-0.5">
+                          <CalendarRange className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-zinc-900">Limpar datas filtradas</p>
+                          <p className="text-[10px] text-zinc-500">Remove datas apenas dos {totalFiltrados} tópicos visíveis</p>
+                        </div>
+                      </button>
+                    )}
+
+                    {onOpenReorganize && (
+                      <button
+                        onClick={() => {
+                          setIsSettingsOpen(false);
+                          onOpenReorganize();
+                        }}
+                        className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 text-xs text-zinc-700 hover:bg-zinc-50 rounded-md transition-colors cursor-pointer"
+                      >
+                        <div className="p-1 bg-zinc-100 rounded text-zinc-700 mt-0.5">
+                          <CalendarDays className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-zinc-900">Reorganizar cronograma</p>
+                          <p className="text-[10px] text-zinc-500">Abre assistente para distribuir tópicos</p>
+                        </div>
+                      </button>
+                    )}
+
+                    {onOpenSubjectManager && (
+                      <button
+                        onClick={() => {
+                          setIsSettingsOpen(false);
+                          onOpenSubjectManager();
+                        }}
+                        className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 text-xs text-zinc-700 hover:bg-zinc-50 rounded-md transition-colors cursor-pointer"
+                      >
+                        <div className="p-1 bg-zinc-100 rounded text-zinc-700 mt-0.5">
+                          <Layers className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-zinc-900">Gerenciar matérias</p>
+                          <p className="text-[10px] text-zinc-500">Altera as cores, ordem e renomeia</p>
+                        </div>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setIsSettingsOpen(false);
+                        onOpenCronogramaManager();
+                      }}
+                      className="w-full text-left flex items-start gap-2.5 px-2.5 py-2 text-xs text-zinc-700 hover:bg-zinc-50 rounded-md transition-colors border-t border-zinc-100 pt-2 mt-1 cursor-pointer"
+                    >
+                      <div className="p-1 bg-zinc-100 rounded text-zinc-700 mt-0.5">
+                        <Sliders className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-zinc-900">Gerenciar cronogramas</p>
+                        <p className="text-[10px] text-zinc-500">Altera nome, descrição ou edital vinculado</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={onNovoPonto}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-black text-white rounded shadow-2xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Novo ponto</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. Search & Select Filters */}

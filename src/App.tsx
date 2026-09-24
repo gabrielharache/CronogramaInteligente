@@ -1126,6 +1126,47 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     setIsImportModalOpen(true);
   }, []);
 
+  const handleClearDates = useCallback((scope: 'cronograma' | 'filtrados') => {
+    const activeId = state.activeCronogramaId;
+    const activeName = activeCronogramaObj ? activeCronogramaObj.nome : "todos os cronogramas";
+
+    let message = "";
+    if (scope === 'cronograma') {
+      message = activeId === 'all'
+        ? "Tem certeza de que deseja limpar as datas de todos os tópicos de TODOS os cronogramas?"
+        : `Tem certeza de que deseja limpar as datas de todos os tópicos do cronograma "${activeName}"?`;
+    } else {
+      message = `Tem certeza de que deseja limpar as datas dos ${filteredPontos.length} tópicos atualmente filtrados?`;
+    }
+
+    if (window.confirm(`${message} Isso removerá as datas de estudo planejadas, permitindo que você as distribua novamente se desejar.`)) {
+      setState(prev => {
+        const targetIds = new Set(
+          scope === 'filtrados'
+            ? filteredPontos.map(p => p.id)
+            : prev.pontos.filter(p => activeId === 'all' || p.cronogramaId === activeId).map(p => p.id)
+        );
+
+        const nextPontos = prev.pontos.map(p => {
+          if (targetIds.has(p.id)) {
+            return {
+              ...p,
+              data: '',
+              datas: undefined,
+              updatedAt: Date.now()
+            };
+          }
+          return p;
+        });
+
+        return {
+          ...prev,
+          pontos: nextPontos
+        };
+      });
+    }
+  }, [state.activeCronogramaId, activeCronogramaObj, filteredPontos]);
+
   // Reorganize Application
   const handleApplyReorganize = useCallback((reorgData: Record<string, string> | PontoEstudo[]) => {
     setState(prev => {
@@ -1432,6 +1473,9 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
                   }}
                   totalFiltrados={filteredPontos.length}
                   totalGeral={activeSchedulePoints.length}
+                  onClearDates={handleClearDates}
+                  onOpenReorganize={() => setIsReorganizeModalOpen(true)}
+                  onOpenSubjectManager={() => setIsSubjectManagerOpen(true)}
                 />
 
                 {/* View 1: Semanal (Accordion cards matching screenshot) */}
