@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { PontoEstudo, TipoEstudo } from '../types';
+import { PontoEstudo, TipoEstudo, Cronograma, Edital } from '../types';
 import { MESES_PT, hojeStr, shiftMonth, formatarDataBr, calcularPercentualAcerto, calcularDificuldadeAutomatica, getDificuldadeInfo } from '../utils/helpers';
 import { 
   ChevronLeft,
@@ -27,6 +27,10 @@ interface CalendarViewProps {
   onMovePontoDate: (pontoId: string, newDate: string) => void;
   onNovoPontoNaData: (data: string) => void;
   onUpdatePonto?: (id: string, updated: Partial<PontoEstudo>) => void;
+  cronogramas?: Cronograma[];
+  editais?: Edital[];
+  activeCronogramaId?: string;
+  onOpenExamDateModal?: () => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -36,7 +40,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onSelectPonto,
   onMovePontoDate,
   onNovoPontoNaData,
-  onUpdatePonto
+  onUpdatePonto,
+  cronogramas = [],
+  editais = [],
+  activeCronogramaId = 'all',
+  onOpenExamDateModal
 }) => {
   const hoje = hojeStr();
   const currentYearMonth = hoje.slice(0, 7);
@@ -50,10 +58,69 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [draggedPontoId, setDraggedPontoId] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
-  // Determine initial list of all months with scheduled points
+  // Gather all exam events from cronogramas and editais
+  const examEvents = useMemo(() => {
+    const list: {
+      date: string;
+      title: string;
+      subTitle?: string;
+      isActive: boolean;
+      cor: string;
+      id: string;
+      type: 'cronograma' | 'edital';
+    }[] = [];
+
+    const addedKeys = new Set<string>();
+    const activeCronogramaObj = cronogramas.find(c => c.id === activeCronogramaId);
+
+    // 1. From cronogramas
+    cronogramas.forEach(c => {
+      if (c.dataProva) {
+        const isThisActive = c.id === activeCronogramaId;
+        const key = `cronograma-${c.id}-${c.dataProva}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          list.push({
+            date: c.dataProva,
+            title: `Prova: ${c.nome}`,
+            subTitle: c.descricao || 'Data do Exame',
+            isActive: isThisActive || activeCronogramaId === 'all',
+            cor: c.cor || '#8C1C2C',
+            id: c.id,
+            type: 'cronograma'
+          });
+        }
+      }
+    });
+
+    // 2. From editais
+    editais.forEach(e => {
+      if (e.dataProva) {
+        const isLinkedToActive = activeCronogramaObj?.editalId === e.id;
+        const key = `edital-${e.id}-${e.dataProva}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          list.push({
+            date: e.dataProva,
+            title: `🏆 PROVA: ${e.nome}`,
+            subTitle: e.cargo || 'Edital',
+            isActive: isLinkedToActive || activeCronogramaId === 'all',
+            cor: '#831843',
+            id: e.id,
+            type: 'edital'
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [cronogramas, editais, activeCronogramaId]);
+
+  // Determine initial list of all months with scheduled points or exam dates
   const allAvailableMonths = useMemo(() => {
-    const dates = allPontos.filter(p => Boolean(p.data)).map(p => p.data.slice(0, 7));
-    const unique = Array.from(new Set([...dates, currentYearMonth])).sort();
+    const pointsMonths = allPontos.filter(p => Boolean(p.data)).map(p => p.data.slice(0, 7));
+    const examMonths = examEvents.map(ev => ev.date.slice(0, 7));
+    const unique = Array.from(new Set([...pointsMonths, ...examMonths, currentYearMonth])).sort();
     
     if (unique.length === 0) {
       return [currentYearMonth, shiftMonth(currentYearMonth, 1), shiftMonth(currentYearMonth, 2)];
@@ -66,7 +133,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       unique.push(nextAfterLast);
     }
     return unique;
-  }, [allPontos, currentYearMonth]);
+  }, [allPontos, examEvents, currentYearMonth]);
 
   const [visibleMonths, setVisibleMonths] = useState<string[]>(allAvailableMonths);
 
@@ -297,6 +364,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 const isDragOver = dragOverDate === dateStr;
                 const allDone = pointsOnThisDay.length > 0 && pointsOnThisDay.every(p => p.lido && p.qFeitas);
 
+                const examsOnThisDay = examEvents.filter(ev => ev.date === dateStr);
+                const hasActiveExam = examsOnThisDay.some(ev => ev.isActive);
+
                 return (
                   <div
                     key={dateStr}
@@ -309,6 +379,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         ? 'border-zinc-900 ring-2 ring-zinc-900/15 bg-white shadow-xs'
                         : isDragOver
                         ? 'border-zinc-900 bg-zinc-100 ring-2 ring-zinc-400/30'
+                        : hasActiveExam
+                        ? 'border-rose-400 bg-rose-50/10 shadow-3xs ring-2 ring-rose-300/30'
                         : allDone
                         ? 'border-emerald-200 bg-emerald-50/20 hover:border-emerald-300'
                         : 'border-zinc-200 bg-white hover:border-zinc-300 hover:shadow-2xs'
@@ -320,6 +392,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <span className={`font-mono text-xs font-bold rounded-md px-2.5 py-0.5 flex items-center justify-center transition-colors ${
                           isToday
                             ? 'bg-zinc-900 text-white shadow-2xs'
+                            : hasActiveExam
+                            ? 'bg-rose-600 text-white font-extrabold shadow-3xs animate-pulse'
                             : allDone
                             ? 'bg-emerald-100 text-emerald-900 font-bold'
                             : 'text-zinc-800 bg-zinc-100'
@@ -329,6 +403,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         {isToday && (
                           <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-zinc-900 bg-zinc-200/80 px-1.5 py-0.5 rounded">
                             Hoje
+                          </span>
+                        )}
+                        {hasActiveExam && (
+                          <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded animate-bounce">
+                            PROVA
                           </span>
                         )}
                       </div>
@@ -342,8 +421,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       </button>
                     </div>
 
-                      {/* Study Points inside this Day - Fitted naturally without any scrollbar */}
+                      {/* Study Points & Exams inside this Day */}
                       <div className="space-y-2 flex-1">
+                        {/* Render Exams */}
+                        {examsOnThisDay.map((ev) => (
+                          <div
+                            key={`${ev.type}-${ev.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenExamDateModal) {
+                                onOpenExamDateModal();
+                              }
+                            }}
+                            className={`p-2 rounded-lg border-2 text-left cursor-pointer transition-all shadow-3xs hover:scale-[1.02] flex items-center gap-1.5 ${
+                              ev.isActive
+                                ? 'bg-rose-50 border-rose-300 hover:border-rose-400 text-rose-950 font-bold'
+                                : 'bg-zinc-50 border-zinc-200 hover:border-zinc-300 text-zinc-500 font-medium'
+                            }`}
+                            title="Data Oficial da Prova do Concurso. Clique para alterar."
+                          >
+                            <span className="text-xs shrink-0">🏆</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[8px] uppercase font-mono tracking-wider opacity-75">
+                                {ev.isActive ? 'PROVA ATIVA' : 'OUTRA PROVA'}
+                              </div>
+                              <div className="text-[10px] leading-tight font-extrabold truncate text-rose-900">
+                                {ev.title.replace('🏆 PROVA:', '').replace('Prova:', '').trim()}
+                              </div>
+                              {ev.subTitle && (
+                                <div className="text-[8px] font-normal opacity-80 truncate text-zinc-600">
+                                  {ev.subTitle}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
                         {pointsOnThisDay.map(p => {
                           const spineColor = materiasCores[p.materia] || '#8C1C2C';
                           const isDone = p.lido && p.qFeitas;

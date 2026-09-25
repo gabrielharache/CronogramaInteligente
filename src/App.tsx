@@ -1520,6 +1520,10 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
                       setIsPontoModalOpen(true);
                     }}
                     onUpdatePonto={handleUpdatePonto}
+                    cronogramas={state.cronogramas}
+                    editais={state.editais}
+                    activeCronogramaId={state.activeCronogramaId}
+                    onOpenExamDateModal={() => setIsExamDateModalOpen(true)}
                   />
                 )}
 
@@ -1626,8 +1630,11 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
           {state.ui.activeTab === 'desempenho' && (
             <PerformanceView
               pontos={activeSchedulePoints}
+              allPontos={state.pontos}
               materiasCores={state.materiasCores}
               sessoesEstudo={state.sessoesEstudo || []}
+              cronogramas={state.cronogramas}
+              activeCronogramaId={state.activeCronogramaId}
               onSelectPonto={(p) => {
                 setDetailPonto(p);
                 setIsDetailModalOpen(true);
