@@ -49,6 +49,32 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const hoje = hojeStr();
   const currentYearMonth = hoje.slice(0, 7);
 
+  // Determine active exam date using exact same fallback order as sidebar
+  const activeExamInfo = useMemo(() => {
+    const activeCronogramaObj = cronogramas.find(c => c.id === activeCronogramaId);
+    if (activeCronogramaObj?.dataProva) {
+      return { date: activeCronogramaObj.dataProva, title: `Prova: ${activeCronogramaObj.nome}`, subTitle: activeCronogramaObj.descricao || 'Data do Exame', isActive: true, cor: activeCronogramaObj.cor || '#8C1C2C' };
+    }
+    if (activeCronogramaObj?.editalId) {
+      const linked = editais.find(e => e.id === activeCronogramaObj.editalId);
+      if (linked?.dataProva) {
+        return { date: linked.dataProva, title: `🏆 PROVA: ${linked.nome}`, subTitle: linked.cargo || 'Edital', isActive: true, cor: '#831843' };
+      }
+    }
+    const upcoming = editais.find(e => e.dataProva && e.dataProva >= hoje) || editais[0];
+    if (upcoming?.dataProva) {
+      return { date: upcoming.dataProva, title: `🏆 PROVA: ${upcoming.nome}`, subTitle: upcoming.cargo || 'Edital', isActive: true, cor: '#831843' };
+    }
+    return { date: '2026-11-29', title: 'Prova do Concurso', subTitle: 'Concurso Padrão', isActive: true, cor: '#831843' };
+  }, [cronogramas, editais, activeCronogramaId, hoje]);
+
+  const initialMonth = useMemo(() => {
+    if (activeExamInfo.date && activeExamInfo.date.length >= 7) {
+      return activeExamInfo.date.slice(0, 7);
+    }
+    return currentYearMonth;
+  }, [activeExamInfo.date, currentYearMonth]);
+
   // View modes: 'single' (focused month by month) or 'stream' (continuous scroll)
   const [displayMode, setDisplayMode] = useState<'single' | 'stream'>('single');
   const [selectedMonth, setSelectedMonth] = useState<string>(currentYearMonth);
@@ -58,7 +84,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [draggedPontoId, setDraggedPontoId] = useState<string | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
 
-  // Gather all exam events from cronogramas and editais
+  // Gather all exam events from cronogramas and editais, ensuring resolved active exam is always included
   const examEvents = useMemo(() => {
     const list: {
       date: string;
@@ -73,7 +99,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const addedKeys = new Set<string>();
     const activeCronogramaObj = cronogramas.find(c => c.id === activeCronogramaId);
 
-    // 1. From cronogramas
+    // 1. Always include resolved active exam event first
+    if (activeExamInfo.date) {
+      const key = `active-resolved-${activeExamInfo.date}`;
+      addedKeys.add(key);
+      list.push({
+        date: activeExamInfo.date,
+        title: activeExamInfo.title,
+        subTitle: activeExamInfo.subTitle,
+        isActive: true,
+        cor: activeExamInfo.cor,
+        id: 'active-resolved',
+        type: 'edital'
+      });
+    }
+
+    // 2. From cronogramas
     cronogramas.forEach(c => {
       if (c.dataProva) {
         const isThisActive = c.id === activeCronogramaId;
@@ -93,7 +134,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       }
     });
 
-    // 2. From editais
+    // 3. From editais
     editais.forEach(e => {
       if (e.dataProva) {
         const isLinkedToActive = activeCronogramaObj?.editalId === e.id;
@@ -114,7 +155,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     });
 
     return list;
-  }, [cronogramas, editais, activeCronogramaId]);
+  }, [cronogramas, editais, activeCronogramaId, activeExamInfo]);
 
   // Determine initial list of all months with scheduled points or exam dates
   const allAvailableMonths = useMemo(() => {
