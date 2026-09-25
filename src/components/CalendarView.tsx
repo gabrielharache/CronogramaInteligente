@@ -53,19 +53,43 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const activeExamInfo = useMemo(() => {
     const activeCronogramaObj = cronogramas.find(c => c.id === activeCronogramaId);
     if (activeCronogramaObj?.dataProva) {
-      return { date: activeCronogramaObj.dataProva, title: `Prova: ${activeCronogramaObj.nome}`, subTitle: activeCronogramaObj.descricao || 'Data do Exame', isActive: true, cor: activeCronogramaObj.cor || '#8C1C2C' };
+      return {
+        date: activeCronogramaObj.dataProva,
+        title: `Prova: ${activeCronogramaObj.nome}`,
+        subTitle: activeCronogramaObj.descricao || 'Data do Exame',
+        isActive: true,
+        cor: activeCronogramaObj.cor || '#8C1C2C',
+        sourceId: activeCronogramaObj.id,
+        sourceType: 'cronograma' as const
+      };
     }
     if (activeCronogramaObj?.editalId) {
       const linked = editais.find(e => e.id === activeCronogramaObj.editalId);
       if (linked?.dataProva) {
-        return { date: linked.dataProva, title: `🏆 PROVA: ${linked.nome}`, subTitle: linked.cargo || 'Edital', isActive: true, cor: '#831843' };
+        return {
+          date: linked.dataProva,
+          title: `🏆 PROVA: ${linked.nome}`,
+          subTitle: linked.cargo || 'Edital',
+          isActive: true,
+          cor: '#831843',
+          sourceId: linked.id,
+          sourceType: 'edital' as const
+        };
       }
     }
     const upcoming = editais.find(e => e.dataProva && e.dataProva >= hoje) || editais[0];
     if (upcoming?.dataProva) {
-      return { date: upcoming.dataProva, title: `🏆 PROVA: ${upcoming.nome}`, subTitle: upcoming.cargo || 'Edital', isActive: true, cor: '#831843' };
+      return {
+        date: upcoming.dataProva,
+        title: `🏆 PROVA: ${upcoming.nome}`,
+        subTitle: upcoming.cargo || 'Edital',
+        isActive: true,
+        cor: '#831843',
+        sourceId: upcoming.id,
+        sourceType: 'edital' as const
+      };
     }
-    return { date: '', title: '', subTitle: '', isActive: false, cor: '' };
+    return { date: '', title: '', subTitle: '', isActive: false, cor: '', sourceId: '', sourceType: 'edital' as const };
   }, [cronogramas, editais, activeCronogramaId, hoje]);
 
   const initialMonth = useMemo(() => {
@@ -105,8 +129,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     const activeCronogramaObj = cronogramas.find(c => c.id === activeCronogramaId);
 
     // 1. Always include resolved active exam event first
-    if (activeExamInfo.date) {
-      const key = `active-resolved-${activeExamInfo.date}`;
+    if (activeExamInfo.date && activeExamInfo.sourceId) {
+      const key = `${activeExamInfo.sourceType}-${activeExamInfo.sourceId}-${activeExamInfo.date}`;
       addedKeys.add(key);
       list.push({
         date: activeExamInfo.date,
@@ -114,8 +138,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         subTitle: activeExamInfo.subTitle,
         isActive: true,
         cor: activeExamInfo.cor,
-        id: 'active-resolved',
-        type: 'edital'
+        id: activeExamInfo.sourceId,
+        type: activeExamInfo.sourceType
       });
     }
 
