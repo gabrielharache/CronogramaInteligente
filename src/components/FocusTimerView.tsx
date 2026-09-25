@@ -43,6 +43,7 @@ interface FocusTimerViewProps {
     materia: string;
     assunto: string;
     pontoId?: string;
+    cronogramaId?: string;
     marcarComoLido: boolean;
     notas: string;
     tipoEstudo?: TipoEstudo;
@@ -226,10 +227,15 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
     const finalMateria = activeTimer.materia || selectedMateria;
     const finalAssunto = activeTimer.assunto || customAssunto || 'Estudo Focado';
 
+    // Try to resolve cronogramaId from selected point if activeTimer has no cronogramaId
+    const associatedPoint = activeTimer.pontoId ? pontos.find(p => p.id === activeTimer.pontoId) : undefined;
+    const resolvedCronogramaId = activeTimer.cronogramaId || associatedPoint?.cronogramaId;
+
     onSaveSessao({
       materia: finalMateria,
       assunto: finalAssunto,
       pontoId: activeTimer.pontoId,
+      cronogramaId: resolvedCronogramaId,
       duracaoSegundos: duracaoLiquida,
       data: hojeStr(),
       inicioTimestamp: agora - duracaoLiquida * 1000,

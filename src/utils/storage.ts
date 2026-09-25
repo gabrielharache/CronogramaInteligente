@@ -299,6 +299,7 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
     id: p.id || uid(),
     cronogramaId: p.cronogramaId || cronogramas[0]?.id || 'cronograma-principal',
     data: p.data || '',
+    datas: Array.isArray(p.datas) ? p.datas : undefined,
     materia: p.materia || 'Geral',
     titulo: p.titulo || 'Sem título',
     tipoEstudo: p.tipoEstudo || 'doutrina',
@@ -311,6 +312,8 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
     qAcertos: p.qAcertos ?? '',
     dif: p.dif || null,
     showNotes: Boolean(p.showNotes),
+    showChecklist: p.showChecklist !== undefined ? Boolean(p.showChecklist) : undefined,
+    subTopicos: Array.isArray(p.subTopicos) ? p.subTopicos : undefined,
     ordem: calculatedOrdemMap.get(p) ?? (idx + 1),
     createdAt: p.createdAt || Date.now(),
     updatedAt: p.updatedAt || Date.now()
@@ -326,9 +329,31 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
     ? parsed.gradeSemanal
     : (fallbackToEmpty ? [] : getDefaultGradeSemanal());
 
-  const sessoesEstudo: SessaoEstudo[] = Array.isArray(parsed.sessoesEstudo)
+  const rawSessoesEstudo: SessaoEstudo[] = Array.isArray(parsed.sessoesEstudo)
     ? parsed.sessoesEstudo
     : (fallbackToEmpty ? [] : getDefaultSessoesEstudo());
+
+  const sessoesEstudo: SessaoEstudo[] = rawSessoesEstudo.map(s => {
+    let cronogramaId = s.cronogramaId;
+    if (!cronogramaId && s.pontoId) {
+      const associatedPoint = migratedPontos.find(p => p.id === s.pontoId);
+      if (associatedPoint) {
+        cronogramaId = associatedPoint.cronogramaId;
+      }
+    }
+    if (!cronogramaId && cronogramas.length > 0) {
+      const matchingPoint = migratedPontos.find(p => p.materia === s.materia);
+      if (matchingPoint && matchingPoint.cronogramaId) {
+        cronogramaId = matchingPoint.cronogramaId;
+      } else {
+        cronogramaId = activeCronogramaId !== 'all' ? activeCronogramaId : cronogramas[0]?.id;
+      }
+    }
+    return {
+      ...s,
+      cronogramaId
+    };
+  });
 
   const ui = {
     view: parsed.ui?.view || 'semanal',

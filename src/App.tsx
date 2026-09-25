@@ -117,6 +117,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     materia: string;
     assunto: string;
     pontoId?: string;
+    cronogramaId?: string;
     marcarComoLido: boolean;
     notas: string;
     tipoEstudo?: TipoEstudo;
@@ -157,6 +158,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
       materia: focusTargetPonto.materia,
       assunto: focusTargetPonto.titulo,
       pontoId: focusTargetPonto.id,
+      cronogramaId: focusTargetPonto.cronogramaId,
       marcarComoLido: true,
       notas: focusTargetPonto.notas || '',
       tipoEstudo: focusTargetPonto.tipoEstudo
@@ -184,11 +186,32 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   }, []);
 
   const handleSaveSessao = useCallback((novaSessaoData: Omit<SessaoEstudo, 'id'>, marcarPontoLidoId?: string) => {
-    const novaSessao: SessaoEstudo = {
-      ...novaSessaoData,
-      id: uid()
-    };
     setState(prev => {
+      let cronogramaId = novaSessaoData.cronogramaId;
+      if (!cronogramaId && novaSessaoData.pontoId) {
+        const associatedPoint = prev.pontos.find(p => p.id === novaSessaoData.pontoId);
+        if (associatedPoint) {
+          cronogramaId = associatedPoint.cronogramaId;
+        }
+      }
+      if (!cronogramaId && prev.activeCronogramaId && prev.activeCronogramaId !== 'all') {
+        cronogramaId = prev.activeCronogramaId;
+      }
+      if (!cronogramaId && prev.cronogramas.length > 0) {
+        const matchingPoint = prev.pontos.find(p => p.materia === novaSessaoData.materia);
+        if (matchingPoint && matchingPoint.cronogramaId) {
+          cronogramaId = matchingPoint.cronogramaId;
+        } else {
+          cronogramaId = prev.cronogramas[0].id;
+        }
+      }
+
+      const novaSessao: SessaoEstudo = {
+        ...novaSessaoData,
+        cronogramaId,
+        id: uid()
+      };
+
       let nextPontos = prev.pontos;
       if (marcarPontoLidoId) {
         nextPontos = prev.pontos.map(p => p.id === marcarPontoLidoId ? { ...p, lido: true } : p);
