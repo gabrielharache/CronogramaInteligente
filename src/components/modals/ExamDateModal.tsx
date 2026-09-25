@@ -173,6 +173,17 @@ export const ExamDateModal: React.FC<ExamDateModalProps> = ({
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200">
             <button
               type="button"
+              onClick={() => {
+                onSaveDate("", selectedEditalId || undefined);
+                onClose();
+              }}
+              className="mr-auto px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+              title="Apagar a data de prova deste concurso"
+            >
+              Limpar Data
+            </button>
+            <button
+              type="button"
               onClick={onClose}
               className="px-3 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900"
             >

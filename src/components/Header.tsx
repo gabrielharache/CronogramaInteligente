@@ -35,6 +35,8 @@ import { useAuth } from '../contexts/AuthContext';
 interface HeaderProps {
   state: AppState;
   activeTab: TabMode;
+  theme?: 'light' | 'dark' | 'sepia';
+  onThemeChange?: (theme: 'light' | 'dark' | 'sepia') => void;
   onTabChange: (tab: TabMode) => void;
   onExport: () => void;
   onOpenImport: () => void;
@@ -59,6 +61,8 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   state,
   activeTab,
+  theme = 'light',
+  onThemeChange,
   onTabChange,
   onExport,
   onOpenImport,
@@ -81,6 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { user, signOut, isGuest, isConfigured } = useAuth();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
 
   const userInitials = user?.user_metadata?.name 
     ? user.user_metadata.name.slice(0, 2).toUpperCase()
@@ -257,6 +262,85 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Tools & Actions */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+          {/* Notion Theme Switcher (Bandeja Minimalista) */}
+          {onThemeChange && (
+            <div className="relative mr-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsThemeMenuOpen(prev => !prev)}
+                className="inline-flex items-center justify-center p-2 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/70 border border-zinc-200/60 transition-all cursor-pointer bg-white"
+                title="Alterar Tema (Notion Themes)"
+                aria-label="Alterar Tema"
+              >
+                <Palette className="w-4 h-4" />
+                <span className="ml-1.5 text-xs">
+                  {theme === 'light' ? '☀️' : theme === 'dark' ? '🌙' : '🍂'}
+                </span>
+              </button>
+
+              {isThemeMenuOpen && (
+                <>
+                  {/* Invisible overlay to close menu when clicking outside */}
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setIsThemeMenuOpen(false)}
+                  />
+                  
+                  {/* Floating Tray Card */}
+                  <div className="absolute right-0 top-full mt-2 w-36 bg-white border border-zinc-200 rounded-xl p-1.5 shadow-lg z-50 flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onThemeChange('light');
+                        setIsThemeMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors ${
+                        theme === 'light'
+                          ? 'bg-zinc-100 text-zinc-900 font-bold'
+                          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+                      }`}
+                    >
+                      <span>☀️</span>
+                      <span>Claro</span>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onThemeChange('dark');
+                        setIsThemeMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors ${
+                        theme === 'dark'
+                          ? 'bg-zinc-900 text-zinc-100 font-bold'
+                          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+                      }`}
+                    >
+                      <span>🌙</span>
+                      <span>Escuro</span>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onThemeChange('sepia');
+                        setIsThemeMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors ${
+                        theme === 'sepia'
+                          ? 'bg-[#f5e6d3] text-[#433422] font-bold'
+                          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
+                      }`}
+                    >
+                      <span>🍂</span>
+                      <span>Sépia</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Cloud Sync & Auto/Manual Save Controls */}
           <div className="flex items-center gap-1.5">
             {isSaving ? (

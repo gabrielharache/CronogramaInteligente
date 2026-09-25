@@ -48,6 +48,19 @@ interface CronogramaDashboardProps {
 
 function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   const [state, setState] = useState<AppState>(() => loadLocalUserState(userId));
+  const [theme, setTheme] = useState<'light' | 'dark' | 'sepia'>(() => {
+    const saved = localStorage.getItem('estante_estudos_theme');
+    return (saved as 'light' | 'dark' | 'sepia') || 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('estante_estudos_theme', theme);
+    const body = document.body;
+    body.classList.remove('theme-dark', 'theme-sepia');
+    if (theme === 'dark') body.classList.add('theme-dark');
+    if (theme === 'sepia') body.classList.add('theme-sepia');
+  }, [theme]);
+
   const [search, setSearch] = useState('');
   const [selectedMateria, setSelectedMateria] = useState('todas');
   const [tipoEstudoFilter, setTipoEstudoFilter] = useState<TipoEstudo | 'todos'>('todos');
@@ -1400,6 +1413,8 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         <Header
           state={state}
           activeTab={state.ui.activeTab}
+          theme={theme}
+          onThemeChange={setTheme}
           onTabChange={(tab) => setState(prev => ({ ...prev, ui: { ...prev.ui, activeTab: tab } }))}
           onExport={() => exportBackup(state)}
           onOpenImport={() => {

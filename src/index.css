@@ -6,13 +6,23 @@
     --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-sans: 'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-mono: 'IBM Plex Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+    /* Semantic light defaults */
+    --bg-app: #f7f7f5;
+    --bg-card: #ffffff;
+    --bg-header: #f7f7f5;
+    --border-color: #e4e4e7;
+    --text-primary: #18181b;
+    --text-secondary: #71717a;
+    --bg-hover: #f4f4f5;
   }
 
   body {
     font-family: var(--font-sans);
-    background-color: #f7f7f5;
-    color: #18181B;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
     letter-spacing: -0.01em;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   h1, h2, h3, h4, .font-display {
@@ -27,6 +37,164 @@
   .font-mono {
     font-family: var(--font-mono);
   }
+}
+
+/* Notion-style Themes Configuration */
+.theme-dark {
+  --bg-app: #191919;
+  --bg-card: #202020;
+  --bg-header: #191919;
+  --border-color: #2e2e2e;
+  --text-primary: #e3e3e3;
+  --text-secondary: #9b9b9b;
+  --bg-hover: #2a2a2a;
+}
+
+.theme-sepia {
+  --bg-app: #fbf0e3;
+  --bg-card: #f5e6d3;
+  --bg-header: #fbf0e3;
+  --border-color: #e6d3c0;
+  --text-primary: #433422;
+  --text-secondary: #7f6a54;
+  --bg-hover: #eddac6;
+}
+
+/* Global Application Level Theme Overrides */
+body.theme-dark,
+body.theme-sepia {
+  background-color: var(--bg-app) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Overriding Backgrounds */
+.theme-dark .bg-white,
+.theme-sepia .bg-white,
+.theme-dark .bg-slate-50,
+.theme-sepia .bg-slate-50 {
+  background-color: var(--bg-card) !important;
+}
+
+.theme-dark .bg-\[\#f7f7f5\],
+.theme-sepia .bg-\[\#f7f7f5\],
+.theme-dark .bg-\[\#f7f7f5\]\/80,
+.theme-sepia .bg-\[\#f7f7f5\]\/80,
+.theme-dark header,
+.theme-sepia header {
+  background-color: var(--bg-header) !important;
+}
+
+.theme-dark .bg-zinc-50,
+.theme-sepia .bg-zinc-50,
+.theme-dark .bg-zinc-50\/40,
+.theme-sepia .bg-zinc-50\/40,
+.theme-dark .bg-zinc-50\/50,
+.theme-sepia .bg-zinc-50\/50,
+.theme-dark .bg-zinc-50\/70,
+.theme-sepia .bg-zinc-50\/70,
+.theme-dark .bg-zinc-50\/90,
+.theme-sepia .bg-zinc-50\/90 {
+  background-color: var(--bg-app) !important;
+}
+
+.theme-dark .bg-zinc-100,
+.theme-sepia .bg-zinc-100,
+.theme-dark .bg-zinc-100\/50,
+.theme-sepia .bg-zinc-100\/50,
+.theme-dark .bg-zinc-100\/90,
+.theme-sepia .bg-zinc-100\/90,
+.theme-dark .bg-zinc-200,
+.theme-sepia .bg-zinc-200,
+.theme-dark .bg-zinc-200\/60,
+.theme-sepia .bg-zinc-200\/60,
+.theme-dark .bg-zinc-200\/70,
+.theme-sepia .bg-zinc-200\/70 {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Hover Overrides */
+.theme-dark .hover\:bg-zinc-50:hover,
+.theme-sepia .hover\:bg-zinc-50:hover,
+.theme-dark .hover\:bg-zinc-50\/90:hover,
+.theme-sepia .hover\:bg-zinc-50\/90:hover,
+.theme-dark .hover\:bg-zinc-100:hover,
+.theme-sepia .hover\:bg-zinc-100:hover,
+.theme-dark .hover\:bg-zinc-200:hover,
+.theme-sepia .hover\:bg-zinc-200:hover,
+.theme-dark .hover\:bg-zinc-100\/70:hover,
+.theme-sepia .hover\:bg-zinc-100\/70:hover {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Border Overrides */
+.theme-dark .border-zinc-100,
+.theme-sepia .border-zinc-100,
+.theme-dark .border-zinc-200,
+.theme-sepia .border-zinc-200,
+.theme-dark .border-zinc-200\/60,
+.theme-sepia .border-zinc-200\/60,
+.theme-dark .border-zinc-200\/80,
+.theme-sepia .border-zinc-200\/80,
+.theme-dark .border-zinc-200\/90,
+.theme-sepia .border-zinc-200\/90,
+.theme-dark .border-zinc-200\/95,
+.theme-sepia .border-zinc-200\/95,
+.theme-dark .border-zinc-150,
+.theme-sepia .border-zinc-150 {
+  border-color: var(--border-color) !important;
+}
+
+/* Text Primary Overrides */
+.theme-dark .text-zinc-900,
+.theme-sepia .text-zinc-900,
+.theme-dark .text-zinc-800,
+.theme-sepia .text-zinc-800,
+.theme-dark .text-zinc-950,
+.theme-sepia .text-zinc-950,
+.theme-dark h1, .theme-dark h2, .theme-dark h3, .theme-dark h4,
+.theme-sepia h1, .theme-sepia h2, .theme-sepia h3, .theme-sepia h4 {
+  color: var(--text-primary) !important;
+}
+
+/* Text Secondary Overrides */
+.theme-dark .text-zinc-500,
+.theme-sepia .text-zinc-500,
+.theme-dark .text-zinc-600,
+.theme-sepia .text-zinc-600,
+.theme-dark .text-zinc-400,
+.theme-sepia .text-zinc-400 {
+  color: var(--text-secondary) !important;
+}
+
+/* Specific elements like inputs and select boxes */
+.theme-dark input, .theme-dark select, .theme-dark textarea,
+.theme-sepia input, .theme-sepia select, .theme-sepia textarea {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.theme-dark input::placeholder, .theme-dark textarea::placeholder,
+.theme-sepia input::placeholder, .theme-sepia textarea::placeholder {
+  color: var(--text-secondary) !important;
+  opacity: 0.7;
+}
+
+/* Icon / Button styles adaptation */
+.theme-dark button.bg-white,
+.theme-sepia button.bg-white {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+}
+
+.theme-dark button.text-zinc-700,
+.theme-sepia button.text-zinc-700 {
+  color: var(--text-secondary) !important;
+}
+
+.theme-dark button.text-zinc-700:hover,
+.theme-sepia button.text-zinc-700:hover {
+  color: var(--text-primary) !important;
 }
 
 /* Notion-style subtle scrollbar */

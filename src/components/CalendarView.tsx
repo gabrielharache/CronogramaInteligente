@@ -65,7 +65,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     if (upcoming?.dataProva) {
       return { date: upcoming.dataProva, title: `🏆 PROVA: ${upcoming.nome}`, subTitle: upcoming.cargo || 'Edital', isActive: true, cor: '#831843' };
     }
-    return { date: '2026-11-29', title: 'Prova do Concurso', subTitle: 'Concurso Padrão', isActive: true, cor: '#831843' };
+    return { date: '', title: '', subTitle: '', isActive: false, cor: '' };
   }, [cronogramas, editais, activeCronogramaId, hoje]);
 
   const initialMonth = useMemo(() => {
@@ -77,8 +77,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   // View modes: 'single' (focused month by month) or 'stream' (continuous scroll)
   const [displayMode, setDisplayMode] = useState<'single' | 'stream'>('single');
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentYearMonth);
+  const [selectedMonth, setSelectedMonth] = useState<string>(initialMonth);
   const [isFullWidth, setIsFullWidth] = useState<boolean>(false);
+
+  // Sync calendar focused month when the active schedule's exam month changes
+  useEffect(() => {
+    setSelectedMonth(initialMonth);
+  }, [initialMonth]);
 
   // Drag and drop states
   const [draggedPontoId, setDraggedPontoId] = useState<string | null>(null);
