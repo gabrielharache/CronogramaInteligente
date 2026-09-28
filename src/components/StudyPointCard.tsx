@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
-import { PontoEstudo, Dificuldade, TipoEstudo } from '../types';
+import React, { useState, useMemo } from 'react';
+import { PontoEstudo, Dificuldade, TipoEstudo, BateriaQuestoes, RevisaoAgendada, TipoRevisaoEspacada } from '../types';
 import { 
   formatarDataBr, 
   hojeStr, 
   calcularPercentualAcerto,
   calcularDificuldadeAutomatica,
   getDificuldadeInfo,
-  addDays
+  addDays,
+  uid,
+  calcularEvolucaoQuestoes,
+  gerarRevisoesCiclo,
+  calcularStatusRevisao,
+  REVISOES_ESPACADAS_CONFIG
 } from '../utils/helpers';
 import { 
   Edit3, 
@@ -22,7 +27,15 @@ import {
   ChevronDown,
   ChevronUp,
   Play,
-  GripVertical
+  GripVertical,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  RotateCcw,
+  CheckCircle2,
+  Plus,
+  AlertCircle,
+  CalendarClock
 } from 'lucide-react';
 
 interface StudyPointCardProps {
@@ -70,12 +83,195 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
   const [isChangingDate, setIsChangingDate] = useState(false);
   const [copiedNote, setCopiedNote] = useState(false);
 
+  // Question evolution new batch form state
+  const [isAddingNewBatch, setIsAddingNewBatch] = useState(false);
+  const [newBatchAcertos, setNewBatchAcertos] = useState<number | ''>('');
+  const [newBatchTotal, setNewBatchTotal] = useState<number | ''>('');
+  const [newBatchData, setNewBatchData] = useState<string>(hojeStr());
+  const [newBatchTipo, setNewBatchTipo] = useState<string>('');
+  const [newBatchNotas, setNewBatchNotas] = useState<string>('');
+
+  // Spaced repetition custom date state
+  const [isAddingCustomRevision, setIsAddingCustomRevision] = useState(false);
+  const [customRevisionDate, setCustomRevisionDate] = useState<string>(addDays(hojeStr(), 14));
+
   const hoje = hojeStr();
   const isHoje = ponto.data === hoje;
   const isConcluido = ponto.lido && ponto.qFeitas;
   const pctAcerto = calcularPercentualAcerto(ponto);
   const difAuto = calcularDificuldadeAutomatica(ponto);
   const difInfo = getDificuldadeInfo(difAuto);
+
+  // Unified question history
+  const historicoQuestoes = useMemo<BateriaQuestoes[]>(() => {
+    if (ponto.historicoQuestoes && ponto.historicoQuestoes.length > 0) {
+      return ponto.historicoQuestoes;
+    }
+    if (ponto.qFeitas && ponto.qTotal && Number(ponto.qTotal) > 0) {
+      const acertos = typeof ponto.qAcertos === 'number' ? ponto.qAcertos : (parseInt(String(ponto.qAcertos), 10) || 0);
+      const total = typeof ponto.qTotal === 'number' ? ponto.qTotal : (parseInt(String(ponto.qTotal), 10) || 1);
+      const pct = Math.round((Math.min(acertos, total) / total) * 100);
+      return [{
+        id: 'initial-' + ponto.id,
+        data: ponto.data || hoje,
+        qAcertos: acertos,
+        qTotal: total,
+        pct,
+        dif: ponto.dif || calcularDificuldadeAutomatica(ponto),
+        tipo: '1ª Bateria (Base)',
+        createdAt: ponto.createdAt || Date.now()
+      }];
+    }
+    return [];
+  }, [ponto.historicoQuestoes, ponto.qFeitas, ponto.qTotal, ponto.qAcertos, ponto.dif, ponto.data, ponto.id, ponto.createdAt, hoje]);
+
+  const evolucao = useMemo(() => calcularEvolucaoQuestoes(historicoQuestoes), [historicoQuestoes]);
+  const revisoesEspacadas = useMemo(() => ponto.revisoesEspacadas || [], [ponto.revisoesEspacadas]);
+
+  // Handlers for Question Batches
+  const handleSaveNewBatch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const acertos = typeof newBatchAcertos === 'number' ? newBatchAcertos : parseInt(String(newBatchAcertos), 10) || 0;
+    const total = typeof newBatchTotal === 'number' ? newBatchTotal : parseInt(String(newBatchTotal), 10) || 0;
+    if (total <= 0) return;
+
+    const acertosReal = Math.min(acertos, total);
+    const pct = Math.round((acertosReal / total) * 100);
+    const dif = calcularDificuldadeAutomatica({ qAcertos: acertosReal, qTotal: total });
+
+    const novaBateria: BateriaQuestoes = {
+      id: uid(),
+      data: newBatchData || hoje,
+      qAcertos: acertosReal,
+      qTotal: total,
+      pct,
+      dif,
+      tipo: newBatchTipo.trim() || `Bateria #${historicoQuestoes.length + 1}`,
+      notas: newBatchNotas.trim() || undefined,
+      createdAt: Date.now()
+    };
+
+    const nextHistorico = [...historicoQuestoes, novaBateria];
+    onUpdate({
+      historicoQuestoes: nextHistorico,
+      qAcertos: acertosReal,
+      qTotal: total,
+      qFeitas: true,
+      dif,
+      updatedAt: Date.now()
+    });
+
+    // Reset form
+    setNewBatchAcertos('');
+    setNewBatchTotal('');
+    setNewBatchTipo('');
+    setNewBatchNotas('');
+    setIsAddingNewBatch(false);
+  };
+
+  const handleDeleteBatch = (batchId: string) => {
+    const nextHistorico = historicoQuestoes.filter(b => b.id !== batchId);
+    if (nextHistorico.length === 0) {
+      onUpdate({
+        historicoQuestoes: [],
+        qAcertos: '',
+        qTotal: '',
+        qFeitas: false,
+        dif: null,
+        updatedAt: Date.now()
+      });
+    } else {
+      const last = nextHistorico[nextHistorico.length - 1];
+      onUpdate({
+        historicoQuestoes: nextHistorico,
+        qAcertos: last.qAcertos,
+        qTotal: last.qTotal,
+        qFeitas: true,
+        dif: last.dif || calcularDificuldadeAutomatica(last),
+        updatedAt: Date.now()
+      });
+    }
+  };
+
+  // Handlers for Spaced Repetition
+  const handleToggleSpacedReview = (tipo: TipoRevisaoEspacada) => {
+    const existing = revisoesEspacadas.find(r => r.tipo === tipo);
+    if (existing) {
+      // Toggle concluded
+      const nextConcluida = !existing.concluida;
+      const nextList = revisoesEspacadas.map(r => 
+        r.id === existing.id 
+          ? { ...r, concluida: nextConcluida, concluidaEm: nextConcluida ? hoje : undefined } 
+          : r
+      );
+      onUpdate({ revisoesEspacadas: nextList, updatedAt: Date.now() });
+    } else {
+      // Schedule new
+      const config = REVISOES_ESPACADAS_CONFIG[tipo];
+      const baseDate = ponto.data || hoje;
+      const dataPrevista = addDays(baseDate, config.dias);
+      const nova: RevisaoAgendada = {
+        id: uid(),
+        tipo,
+        dataPrevista,
+        concluida: false,
+        createdAt: Date.now()
+      };
+      onUpdate({
+        revisoesEspacadas: [...revisoesEspacadas, nova],
+        updatedAt: Date.now()
+      });
+    }
+  };
+
+  const handleScheduleFullCycle = () => {
+    const baseDate = ponto.data || hoje;
+    const tipos: TipoRevisaoEspacada[] = ['24h', '7d', '30d', '60d'];
+    const existingTipos = new Set(revisoesEspacadas.map(r => r.tipo));
+    const novos: RevisaoAgendada[] = [];
+
+    tipos.forEach(t => {
+      if (!existingTipos.has(t)) {
+        const config = REVISOES_ESPACADAS_CONFIG[t];
+        novos.push({
+          id: uid(),
+          tipo: t,
+          dataPrevista: addDays(baseDate, config.dias),
+          concluida: false,
+          createdAt: Date.now()
+        });
+      }
+    });
+
+    onUpdate({
+      revisoesEspacadas: [...revisoesEspacadas, ...novos],
+      updatedAt: Date.now()
+    });
+  };
+
+  const handleRemoveSpacedReview = (id: string) => {
+    onUpdate({
+      revisoesEspacadas: revisoesEspacadas.filter(r => r.id !== id),
+      updatedAt: Date.now()
+    });
+  };
+
+  const handleAddCustomSpacedReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customRevisionDate) return;
+    const nova: RevisaoAgendada = {
+      id: uid(),
+      tipo: 'personalizada',
+      dataPrevista: customRevisionDate,
+      concluida: false,
+      createdAt: Date.now()
+    };
+    onUpdate({
+      revisoesEspacadas: [...revisoesEspacadas, nova],
+      updatedAt: Date.now()
+    });
+    setIsAddingCustomRevision(false);
+  };
 
   // Parse weekday and date label
   const getDayInfo = (dateStr: string) => {
@@ -266,6 +462,42 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
               </span>
             )}
 
+            {/* Evolution Trend Badge */}
+            {evolucao.totalBaterias > 1 && evolucao.delta !== null && (
+              <button
+                type="button"
+                onClick={() => onUpdate({ showEvolution: !ponto.showEvolution })}
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                  evolucao.trend === 'up'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                    : evolucao.trend === 'down'
+                    ? 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                    : 'bg-zinc-100 text-zinc-700 border-zinc-200 hover:bg-zinc-200'
+                }`}
+                title={`Evolução histórica: ${evolucao.primeira?.pct}% ➔ ${evolucao.ultima?.pct}% (${evolucao.delta > 0 ? '+' : ''}${evolucao.delta}%)`}
+              >
+                {evolucao.trend === 'up' && <TrendingUp className="w-2.5 h-2.5 text-emerald-600" />}
+                {evolucao.trend === 'down' && <TrendingDown className="w-2.5 h-2.5 text-rose-600" />}
+                {evolucao.trend === 'stable' && <Minus className="w-2.5 h-2.5 text-zinc-500" />}
+                <span>{evolucao.delta > 0 ? `+${evolucao.delta}%` : `${evolucao.delta}%`} ({evolucao.totalBaterias}ª bateria)</span>
+              </button>
+            )}
+
+            {/* Spaced Repetition Indicator Badge */}
+            {revisoesEspacadas.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onUpdate({ showSpacedRepetition: !ponto.showSpacedRepetition })}
+                className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer"
+                title="Régua de repetição espaçada ativa"
+              >
+                <RotateCcw className="w-2.5 h-2.5 text-indigo-600" />
+                <span>
+                  {revisoesEspacadas.filter(r => r.concluida).length}/{revisoesEspacadas.length} Revisões
+                </span>
+              </button>
+            )}
+
             {isHoje && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#831843] text-white">
                 HOJE
@@ -404,6 +636,32 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
               className={`hover:text-zinc-800 hover:underline cursor-pointer transition-colors ${ponto.showChecklist ? 'font-bold text-zinc-900' : ''}`}
             >
               Checklist {ponto.subTopicos && ponto.subTopicos.length > 0 ? `(${ponto.subTopicos.filter(st => st.concluido).length}/${ponto.subTopicos.length})` : ''}
+            </button>
+
+            <span>•</span>
+
+            {/* Evolução de Questões */}
+            <button
+              type="button"
+              onClick={() => onUpdate({ showEvolution: !ponto.showEvolution })}
+              className={`hover:text-zinc-800 hover:underline cursor-pointer transition-colors inline-flex items-center gap-1 ${ponto.showEvolution ? 'font-bold text-zinc-900' : ''}`}
+              title="Ver histórico cumulativo de questões e evolução"
+            >
+              <TrendingUp className="w-3 h-3 text-emerald-600" />
+              <span>Evolução {historicoQuestoes.length > 0 ? `(${historicoQuestoes.length})` : ''}</span>
+            </button>
+
+            <span>•</span>
+
+            {/* Régua de Repetição Espaçada */}
+            <button
+              type="button"
+              onClick={() => onUpdate({ showSpacedRepetition: !ponto.showSpacedRepetition })}
+              className={`hover:text-zinc-800 hover:underline cursor-pointer transition-colors inline-flex items-center gap-1 ${ponto.showSpacedRepetition ? 'font-bold text-indigo-900' : 'text-indigo-600'}`}
+              title="Régua de repetição espaçada (R24h, R7d, R30d, R60d)"
+            >
+              <RotateCcw className="w-3 h-3 text-indigo-500" />
+              <span>Revisão Espaçada {revisoesEspacadas.length > 0 ? `(${revisoesEspacadas.filter(r => r.concluida).length}/${revisoesEspacadas.length})` : ''}</span>
             </button>
 
             {onSplit && (
@@ -552,6 +810,398 @@ export const StudyPointCard: React.FC<StudyPointCardProps> = ({
                   <p className="text-[11px] text-zinc-400">Nenhum sub-tópico cadastrado. Adicione tarefas para dividir o estudo!</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Expanded Question Evolution Drawer */}
+          {ponto.showEvolution && (
+            <div className="mt-2.5 pt-2.5 border-t border-zinc-100 space-y-2.5 bg-zinc-50/50 p-2.5 rounded-lg border border-zinc-150/70">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <span className="text-[11px] font-bold text-zinc-800 uppercase tracking-wide">
+                    Evolução & Histórico de Questões
+                  </span>
+                  {evolucao.totalBaterias > 0 && (
+                    <span className="text-[10px] font-mono font-semibold bg-zinc-200/80 text-zinc-700 px-1.5 py-0.2 rounded">
+                      {evolucao.totalBaterias} {evolucao.totalBaterias === 1 ? 'tentativa' : 'tentativas'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {evolucao.totalBaterias > 1 && evolucao.delta !== null && (
+                    <div className="text-[11px] font-mono font-bold flex items-center gap-1">
+                      <span className="text-zinc-500 font-sans font-normal text-[10px]">Evolução:</span>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] ${
+                        evolucao.trend === 'up'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : evolucao.trend === 'down'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-zinc-200 text-zinc-800'
+                      }`}>
+                        {evolucao.delta > 0 ? `+${evolucao.delta}%` : `${evolucao.delta}%`}
+                      </span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingNewBatch(prev => !prev)}
+                    className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-200 px-2 py-0.5 rounded hover:bg-emerald-50 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>{isAddingNewBatch ? 'Fechar' : 'Nova Bateria'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Evolution Summary Progress Steps */}
+              {historicoQuestoes.length > 0 && (
+                <div className="bg-white p-2.5 rounded-md border border-zinc-200/70 shadow-3xs space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1">
+                    <span>Curva de Retenção:</span>
+                    <span className="font-mono font-semibold text-zinc-700">
+                      Média: {evolucao.mediaGeral !== null ? `${evolucao.mediaGeral}%` : '—'} ({evolucao.totalAcertos}/{evolucao.totalQuestoes})
+                    </span>
+                  </div>
+
+                  {/* Horizontal mini timeline of attempts */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {historicoQuestoes.map((b, idx) => {
+                      const isLatest = idx === historicoQuestoes.length - 1;
+                      const difClass = b.pct >= 70 ? 'bg-emerald-500' : b.pct >= 46 ? 'bg-amber-500' : 'bg-rose-500';
+                      return (
+                        <div 
+                          key={b.id || idx} 
+                          className={`flex-1 min-w-[70px] max-w-[110px] p-1.5 rounded border text-center transition-all ${
+                            isLatest ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-200' : 'bg-zinc-50 border-zinc-200'
+                          }`}
+                        >
+                          <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-tight truncate">
+                            #{idx + 1} {b.tipo || 'Bateria'}
+                          </div>
+                          <div className="font-mono text-xs font-extrabold text-zinc-900 my-0.5">
+                            {b.pct}%
+                          </div>
+                          {/* Mini visual fill bar */}
+                          <div className="w-full bg-zinc-200 rounded-full h-1 overflow-hidden">
+                            <div className={`h-full ${difClass}`} style={{ width: `${b.pct}%` }} />
+                          </div>
+                          <div className="text-[9px] text-zinc-400 font-mono mt-0.5">
+                            {b.qAcertos}/{b.qTotal}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Form to add a new question batch */}
+              {isAddingNewBatch && (
+                <form 
+                  onSubmit={handleSaveNewBatch}
+                  className="bg-white p-3 rounded-md border border-emerald-200 shadow-3xs space-y-2 animate-in fade-in duration-150"
+                >
+                  <div className="text-[11px] font-bold text-zinc-800 flex items-center justify-between">
+                    <span>Registrar Nova Bateria de Exercícios</span>
+                    <span className="text-[10px] text-zinc-400">Essa tentativa entrará no histórico e atualizará seu aproveitamento</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">Acertos:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Ex: 16"
+                        required
+                        value={newBatchAcertos}
+                        onChange={(e) => setNewBatchAcertos(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-full text-xs font-mono font-bold px-2 py-1 bg-zinc-50 border border-zinc-200 rounded focus:bg-white focus:border-zinc-900 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">Total de Questões:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Ex: 20"
+                        required
+                        value={newBatchTotal}
+                        onChange={(e) => setNewBatchTotal(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        className="w-full text-xs font-mono font-bold px-2 py-1 bg-zinc-50 border border-zinc-200 rounded focus:bg-white focus:border-zinc-900 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">Data:</label>
+                      <input
+                        type="date"
+                        value={newBatchData}
+                        onChange={(e) => setNewBatchData(e.target.value)}
+                        className="w-full text-xs px-2 py-1 bg-zinc-50 border border-zinc-200 rounded focus:bg-white focus:border-zinc-900 focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">Tipo / Contexto:</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Revisão R7d, Simulado..."
+                        value={newBatchTipo}
+                        onChange={(e) => setNewBatchTipo(e.target.value)}
+                        className="w-full text-xs px-2 py-1 bg-zinc-50 border border-zinc-200 rounded focus:bg-white focus:border-zinc-900 focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">Anotação rápida desta bateria (opcional):</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Errei prazo de decadência, revisar art. 205..."
+                      value={newBatchNotas}
+                      onChange={(e) => setNewBatchNotas(e.target.value)}
+                      className="w-full text-xs px-2 py-1 bg-zinc-50 border border-zinc-200 rounded focus:bg-white focus:border-zinc-900 focus:outline-hidden"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingNewBatch(false)}
+                      className="px-2.5 py-1 text-xs text-zinc-600 hover:text-zinc-900 transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-3 py-1 bg-emerald-700 text-white rounded text-xs font-semibold hover:bg-emerald-800 transition-colors shadow-2xs cursor-pointer"
+                    >
+                      Salvar Tentativa
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* History list of attempts */}
+              {historicoQuestoes.length > 0 ? (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pt-1">
+                  {historicoQuestoes.map((b, idx) => {
+                    const difInfoItem = getDificuldadeInfo(b.dif || calcularDificuldadeAutomatica(b));
+                    return (
+                      <div 
+                        key={b.id || idx}
+                        className="flex items-center justify-between gap-2 p-1.5 bg-white border border-zinc-200/80 rounded-md shadow-3xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-mono font-bold bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded shrink-0">
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-zinc-900 font-mono">
+                                {b.qAcertos}/{b.qTotal} ({b.pct}%)
+                              </span>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${difInfoItem.badgeClass}`}>
+                                {difInfoItem.label}
+                              </span>
+                              <span className="text-[10px] text-zinc-400 font-mono">
+                                • {formatarDataBr(b.data)}
+                              </span>
+                            </div>
+                            {(b.tipo || b.notas) && (
+                              <p className="text-[11px] text-zinc-500 truncate">
+                                {b.tipo ? <strong className="text-zinc-700">{b.tipo}: </strong> : null}
+                                {b.notas}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBatch(b.id)}
+                          className="p-1 text-zinc-300 hover:text-rose-600 rounded transition-colors cursor-pointer shrink-0"
+                          title="Remover esta tentativa do histórico"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-3 bg-white border border-dashed border-zinc-200 rounded-md">
+                  <p className="text-[11px] text-zinc-400">Nenhuma bateria registrada ainda. Clique em "Nova Bateria" acima para iniciar!</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Expanded Spaced Repetition Drawer */}
+          {ponto.showSpacedRepetition && (
+            <div className="mt-2.5 pt-2.5 border-t border-zinc-100 space-y-2.5 bg-indigo-50/40 p-2.5 rounded-lg border border-indigo-150/70">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <RotateCcw className="w-4 h-4 text-indigo-600" />
+                  <span className="text-[11px] font-bold text-zinc-900 uppercase tracking-wide">
+                    Régua de Repetição Espaçada
+                  </span>
+                  <span className="text-[10px] text-indigo-700 bg-indigo-100/80 px-1.5 py-0.2 rounded font-semibold">
+                    Aparece na aba de Revisões
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleScheduleFullCycle}
+                    className="text-[10px] font-bold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 px-2 py-0.5 rounded transition-colors shadow-3xs cursor-pointer inline-flex items-center gap-1"
+                    title="Agendar R24h (+1d), R7d (+7d), R30d (+30d) e R60d (+60d) de uma só vez!"
+                  >
+                    <CalendarClock className="w-3 h-3 text-indigo-600" />
+                    <span>Ciclo Completo (24h/7d/30d/60d)</span>
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-zinc-500 leading-tight">
+                As datas agendadas <strong className="text-zinc-700">não poluem seu calendário</strong>, mas entram automaticamente na sua lista prioritária de estudos na aba <strong className="text-indigo-700">Revisões</strong>.
+              </p>
+
+              {/* 4 Stages Grid: 24h, 7d, 30d, 60d */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5">
+                {(['24h', '7d', '30d', '60d'] as TipoRevisaoEspacada[]).map((tipo) => {
+                  const config = REVISOES_ESPACADAS_CONFIG[tipo];
+                  const existing = revisoesEspacadas.find(r => r.tipo === tipo);
+
+                  if (existing) {
+                    const statusInfo = calcularStatusRevisao(existing);
+                    return (
+                      <div 
+                        key={tipo}
+                        className={`p-2 rounded-lg border flex flex-col justify-between transition-all ${
+                          existing.concluida 
+                            ? 'bg-emerald-50/60 border-emerald-200' 
+                            : statusInfo.status === 'hoje'
+                            ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-200 shadow-2xs'
+                            : statusInfo.status === 'atrasada'
+                            ? 'bg-rose-50 border-rose-200'
+                            : 'bg-white border-indigo-200/80 shadow-3xs'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="text-[11px] font-extrabold text-zinc-900 font-mono">
+                            {config.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSpacedReview(existing.id)}
+                            className="text-zinc-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
+                            title="Desagendar esta revisão"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        <div className="text-[10px] text-zinc-500 font-mono mb-1.5">
+                          {formatarDataBr(existing.dataPrevista)}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 mt-auto">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border truncate ${statusInfo.badgeClass}`}>
+                            {statusInfo.label}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSpacedReview(tipo)}
+                            className={`p-1 rounded text-xs transition-colors cursor-pointer shrink-0 ${
+                              existing.concluida
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                            }`}
+                            title={existing.concluida ? "Marcar como pendente" : "Marcar como revisado"}
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Not scheduled yet
+                  const baseDate = ponto.data || hoje;
+                  const previewDate = addDays(baseDate, config.dias);
+                  return (
+                    <div 
+                      key={tipo}
+                      className="p-2 rounded-lg border border-dashed border-zinc-300 bg-white/70 flex flex-col justify-between hover:border-indigo-300 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-[11px] font-bold text-zinc-600 font-mono">
+                          {config.label}
+                        </span>
+                        <span className="text-[9px] text-zinc-400">+{config.dias}d</span>
+                      </div>
+
+                      <div className="text-[10px] text-zinc-400 font-mono mb-1.5">
+                        {formatarDataBr(previewDate)}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSpacedReview(tipo)}
+                        className="w-full text-center py-1 px-1.5 text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded hover:bg-indigo-100 transition-colors cursor-pointer"
+                      >
+                        + Agendar {config.label}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Custom Date Revision Trigger */}
+              <div className="pt-1 flex items-center justify-between text-xs">
+                {!isAddingCustomRevision ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingCustomRevision(true)}
+                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Agendar em data específica personalizada</span>
+                  </button>
+                ) : (
+                  <form onSubmit={handleAddCustomSpacedReview} className="flex items-center gap-1.5 bg-white p-1.5 rounded border border-indigo-200">
+                    <span className="text-[11px] text-zinc-600 font-semibold">Data da revisão:</span>
+                    <input
+                      type="date"
+                      required
+                      value={customRevisionDate}
+                      onChange={(e) => setCustomRevisionDate(e.target.value)}
+                      className="text-xs bg-zinc-50 border border-zinc-200 rounded px-1.5 py-0.5"
+                    />
+                    <button
+                      type="submit"
+                      className="px-2 py-0.5 text-xs font-semibold bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors cursor-pointer"
+                    >
+                      Agendar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCustomRevision(false)}
+                      className="text-xs text-zinc-400 hover:text-zinc-600 px-1"
+                    >
+                      ✕
+                    </button>
+                  </form>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -250,7 +250,7 @@ export const EditalModal: React.FC<EditalModalProps> = ({
               />
               <Upload className="w-5 h-5 text-zinc-500 mx-auto mb-1.5" />
               <p className="text-xs font-semibold text-zinc-800">
-                Arraste seu arquivo <span className="font-mono text-zinc-900 bg-zinc-200/80 px-1 py-0.2 rounded">.md</span> aqui ou clique para selecionar
+                Arraste seu arquivo <span className="font-mono text-zinc-900 bg-zinc-200/80 px-1.5 py-0.5 rounded">.md</span> aqui ou clique para selecionar
               </p>
               <p className="text-[11px] text-zinc-500 mt-0.5">
                 Preenche automaticamente órgão, cargo, banca, data da prova e conteúdo programático

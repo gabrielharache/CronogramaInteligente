@@ -361,7 +361,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                   <span className="text-[11px] font-medium hidden sm:inline">Pendente</span>
                   {autoSaveCountdown !== null && (
-                    <span className="text-[10px] font-mono font-bold bg-amber-200/70 text-amber-900 px-1 py-0.2 rounded">
+                    <span className="text-[10px] font-mono font-bold bg-amber-200/70 text-amber-900 px-1 py-0.5 rounded">
                       {autoSaveCountdown}s
                     </span>
                   )}
@@ -461,7 +461,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <span className="w-1.5 h-1.5 rounded-full bg-[#831843] animate-pulse" />
                       <span>Hoje — Meta Diária</span>
                     </div>
-                    <span className="text-zinc-400 font-mono text-[9px] uppercase bg-zinc-50 border border-zinc-100 px-1.5 py-0.5 rounded">
+                    <span className="text-zinc-500 font-sans text-[11px] bg-zinc-50 border border-zinc-200/80 px-2 py-0.5 rounded-md font-medium">
                       {formattedTodayDate}
                     </span>
                   </div>
@@ -509,7 +509,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
                       <span>Metas de Hoje Concluídas</span>
                     </div>
-                    <span className="text-zinc-400 font-mono text-[9px] uppercase bg-zinc-50 border border-zinc-100 px-1.5 py-0.5 rounded">
+                    <span className="text-zinc-500 font-sans text-[11px] bg-zinc-50 border border-zinc-200/80 px-2 py-0.5 rounded-md font-medium">
                       {formattedTodayDate}
                     </span>
                   </div>

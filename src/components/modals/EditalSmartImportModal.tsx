@@ -620,14 +620,14 @@ export const EditalSmartImportModal: React.FC<EditalSmartImportModalProps> = ({
                                     {/* Badges for Legal & Jurisprudence info */}
                                     <div className="flex items-center flex-wrap gap-1.5 text-[10px]">
                                       {topic.artigosLei && (
-                                        <span className="inline-flex items-center gap-1 font-mono font-medium px-1.5 py-0.2 rounded bg-amber-50 border border-amber-200 text-amber-800">
+                                        <span className="inline-flex items-center gap-1 font-mono font-medium px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800">
                                           <Scale className="w-2.5 h-2.5" />
                                           {topic.artigosLei}
                                         </span>
                                       )}
 
                                       {topic.jurisprudenciaRef && (
-                                        <span className="inline-flex items-center gap-1 font-mono font-medium px-1.5 py-0.2 rounded bg-purple-50 border border-purple-200 text-purple-800">
+                                        <span className="inline-flex items-center gap-1 font-mono font-medium px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-800">
                                           <Gavel className="w-2.5 h-2.5" />
                                           {topic.jurisprudenciaRef}
                                         </span>

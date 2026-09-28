@@ -18,9 +18,15 @@ import {
   Printer,
   Scale,
   Landmark,
-  AlertCircle
+  AlertCircle,
+  Search,
+  Filter,
+  Play,
+  CheckCircle2,
+  ArrowRight,
+  ExternalLink
 } from 'lucide-react';
-import { uid } from '../utils/helpers';
+import { uid, formatarDataBr } from '../utils/helpers';
 import { PontoEstudo } from '../types';
 
 interface WeeklyScheduleViewProps {
@@ -30,6 +36,9 @@ interface WeeklyScheduleViewProps {
   materias: string[];
   materiasCores: Record<string, string>;
   pontos?: PontoEstudo[];
+  onUpdatePonto?: (id: string, updated: Partial<PontoEstudo>) => void;
+  onStartFocus?: (ponto: PontoEstudo) => void;
+  onSelectPonto?: (ponto: PontoEstudo) => void;
 }
 
 const DIAS_SEMANA = [
@@ -86,7 +95,10 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
   onUpdateGrade,
   materias = [],
   materiasCores = {},
-  pontos = []
+  pontos = [],
+  onUpdatePonto,
+  onStartFocus,
+  onSelectPonto
 }) => {
   const gradeSemanal = useMemo(() => {
     return Array.isArray(rawGradeSemanal) 
@@ -96,6 +108,12 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
   // Config for hours to display: 24h, starting from 00:00 to 23:00 in chronological order
   const [selectedDayTab, setSelectedDayTab] = useState<number | 'todos'>('todos');
   const [layoutMode, setLayoutMode] = useState<'agenda' | 'grade'>('grade');
+
+  // Drawer / Tray for Study Points from Schedule
+  const [showCardsDrawer, setShowCardsDrawer] = useState(false);
+  const [drawerSearch, setDrawerSearch] = useState('');
+  const [drawerMateria, setDrawerMateria] = useState('todas');
+  const [drawerStatus, setDrawerStatus] = useState<'todos' | 'pendentes' | 'concluidos' | 'revisoes'>('todos');
 
   // Modal / form state for adding/editing a block
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -112,6 +130,38 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
   const [formNotas, setFormNotas] = useState<string>('');
   const [formPontoId, setFormPontoId] = useState<string>('');
   const [formTipoEstudo, setFormTipoEstudo] = useState<TipoEstudo | undefined>(undefined);
+
+  // Quick allocation from drawer
+  const handleAllocatePontoFromDrawer = (ponto: PontoEstudo, dia: number = 1, hora: number = 8) => {
+    setEditingBlock(null);
+    setFormDia(dia);
+    setFormHoraInicio(hora);
+    setFormHoraFim(Math.min(24, hora + 2));
+    setFormCategoria('estudo');
+    setFormTitulo(ponto.titulo);
+    setFormMateria(ponto.materia);
+    setFormNotas(ponto.notas || '');
+    setFormPontoId(ponto.id);
+    setFormTipoEstudo(ponto.tipoEstudo);
+    setFormError(null);
+    setIsModalOpen(true);
+  };
+
+  // Filtered study points for drawer
+  const filteredDrawerPontos = useMemo(() => {
+    return (pontos || []).filter(p => {
+      const matchesSearch = 
+        p.titulo.toLowerCase().includes(drawerSearch.toLowerCase()) ||
+        p.materia.toLowerCase().includes(drawerSearch.toLowerCase()) ||
+        (p.artigosLei && p.artigosLei.toLowerCase().includes(drawerSearch.toLowerCase()));
+      const matchesMateria = drawerMateria === 'todas' || p.materia === drawerMateria;
+      let matchesStatus = true;
+      if (drawerStatus === 'pendentes') matchesStatus = !p.lido;
+      else if (drawerStatus === 'concluidos') matchesStatus = Boolean(p.lido);
+      else if (drawerStatus === 'revisoes') matchesStatus = Boolean(p.revisoesEspacadas && p.revisoesEspacadas.some(r => !r.concluida));
+      return matchesSearch && matchesMateria && matchesStatus;
+    });
+  }, [pontos, drawerSearch, drawerMateria, drawerStatus]);
 
   // Confirmation for resetting/clearing
   const [confirmClear, setConfirmClear] = useState(false);
@@ -368,6 +418,19 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
           </button>
 
           <button
+            onClick={() => setShowCardsDrawer(prev => !prev)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              showCardsDrawer
+                ? 'bg-blue-600 text-white shadow-2xs ring-2 ring-blue-300'
+                : 'bg-white hover:bg-blue-50 text-blue-800 border border-blue-200 shadow-3xs'
+            }`}
+            title="Abrir gaveta de cartões do cronograma para alocar na grade"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Cards para Alocar ({pontos.length})</span>
+          </button>
+
+          <button
             onClick={() => handleOpenAddAt(1, 8)}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white shadow-3xs transition-colors cursor-pointer"
           >
@@ -376,6 +439,174 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Collapsible Drawer for Study Points from Schedule */}
+      {showCardsDrawer && (
+        <div className="bg-white border border-blue-200 rounded-2xl p-4 shadow-sm space-y-3 animate-in fade-in duration-150 no-print">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-100 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-sans font-bold text-sm text-zinc-900">
+                  Tópicos do Cronograma para Alocar na Grade Semanal
+                </h3>
+                <p className="text-[11px] text-zinc-500">
+                  Conecte seus cards de estudo diretamente aos blocos de horários da sua rotina
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded border border-zinc-200">
+                {filteredDrawerPontos.length} de {pontos.length} cards
+              </span>
+              <button
+                onClick={() => setShowCardsDrawer(false)}
+                className="text-zinc-400 hover:text-zinc-700 p-1 rounded-md cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Filter Controls */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                placeholder="Buscar tópico por título ou artigo..."
+                value={drawerSearch}
+                onChange={(e) => setDrawerSearch(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-zinc-900"
+              />
+            </div>
+
+            <div className="relative">
+              <select
+                value={drawerMateria}
+                onChange={(e) => setDrawerMateria(e.target.value)}
+                className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-zinc-900"
+              >
+                <option value="todas">Todas as Matérias</option>
+                {materias.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="relative">
+              <select
+                value={drawerStatus}
+                onChange={(e) => setDrawerStatus(e.target.value as any)}
+                className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-zinc-900"
+              >
+                <option value="todos">Todos os Status</option>
+                <option value="pendentes">Apenas Pendentes</option>
+                <option value="concluidos">Apenas Concluídos</option>
+                <option value="revisoes">Com Revisões Agendadas</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Scrollable Cards Grid */}
+          {filteredDrawerPontos.length === 0 ? (
+            <div className="py-8 text-center text-zinc-400 text-xs">
+              Nenhum tópico encontrado com esses filtros.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto pt-1">
+              {filteredDrawerPontos.map(p => {
+                const cardColor = materiasCores[p.materia] || '#8C1C2C';
+                const cardAllocations = gradeSemanal.filter(b => b.pontoId === p.id);
+                const hasAllocations = cardAllocations.length > 0;
+
+                return (
+                  <div
+                    key={p.id}
+                    className={`p-3 rounded-xl border flex flex-col justify-between transition-all bg-white ${
+                      hasAllocations 
+                        ? 'border-blue-200 bg-blue-50/20' 
+                        : 'border-zinc-200 hover:border-zinc-300 shadow-3xs'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                        <span 
+                          className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-white truncate max-w-[150px]"
+                          style={{ backgroundColor: cardColor }}
+                        >
+                          {p.materia}
+                        </span>
+
+                        {hasAllocations ? (
+                          <span className="text-[9px] font-mono font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded border border-blue-200">
+                            {cardAllocations.length === 1 
+                              ? `${DIAS_SEMANA.find(d => d.id === cardAllocations[0].diaSemana)?.abrev} ${cardAllocations[0].horaInicio}h`
+                              : `${cardAllocations.length} horários`}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-zinc-400 font-sans">
+                            Não alocado
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 
+                        onClick={() => onSelectPonto?.(p)}
+                        className="font-serif font-bold text-xs text-zinc-900 leading-snug line-clamp-2 cursor-pointer hover:underline"
+                        title="Ver detalhes"
+                      >
+                        {p.titulo}
+                      </h4>
+
+                      {p.data && (
+                        <span className="text-[10px] text-zinc-400 font-mono mt-1 block">
+                          Data no cronograma: {formatarDataBr(p.data)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-zinc-100 flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleAllocatePontoFromDrawer(p, selectedDayTab === 'todos' ? 1 : selectedDayTab, 8)}
+                        className="flex-1 py-1 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer text-center"
+                      >
+                        + Alocar na Grade
+                      </button>
+
+                      {onStartFocus && (
+                        <button
+                          type="button"
+                          onClick={() => onStartFocus(p)}
+                          className="p-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors cursor-pointer"
+                          title="Iniciar sessão de foco neste card"
+                        >
+                          <Play className="w-3 h-3 fill-amber-700" />
+                        </button>
+                      )}
+
+                      {onSelectPonto && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectPonto(p)}
+                          className="p-1 rounded-lg text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 transition-colors cursor-pointer text-[10px]"
+                          title="Ver card completo"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Counters & Weekly Allocation Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -681,15 +912,65 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                               </div>
                             )}
 
-                            {/* Linked Topic */}
+                            {/* Linked Topic from Schedule */}
                             {linkedPonto && (
                               <div 
-                                className="text-[10px] bg-white/70 border border-blue-200/80 text-blue-900 rounded-md px-2 py-1 mt-1.5 flex items-center gap-1.5 max-w-full shadow-3xs"
-                                title={`Tópico: ${linkedPonto.titulo}`}
+                                className="text-[10px] bg-white border border-blue-200 text-blue-900 rounded-lg p-2 mt-2 flex flex-col gap-1.5 shadow-3xs"
                               >
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                                <span className="font-semibold truncate">Tópico: {linkedPonto.titulo}</span>
-                                {linkedPonto.lido && <span className="text-emerald-600 font-bold ml-auto text-[9px] shrink-0">✓</span>}
+                                <div className="flex items-center justify-between gap-1">
+                                  <div 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onSelectPonto?.(linkedPonto);
+                                    }}
+                                    className="flex items-center gap-1.5 min-w-0 cursor-pointer hover:underline"
+                                    title="Clique para ver o card completo do tópico"
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                                    <span className="font-bold truncate text-[11px] text-zinc-900">{linkedPonto.titulo}</span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {onUpdatePonto && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUpdatePonto(linkedPonto.id, { lido: !linkedPonto.lido });
+                                        }}
+                                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
+                                          linkedPonto.lido 
+                                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200' 
+                                            : 'bg-zinc-100 text-zinc-700 border border-zinc-200 hover:bg-zinc-200'
+                                        }`}
+                                        title={linkedPonto.lido ? "Tópico estudado! Clique para desmarcar" : "Clique para marcar como estudado"}
+                                      >
+                                        {linkedPonto.lido ? '✓ Estudado' : 'Marcar Feito'}
+                                      </button>
+                                    )}
+
+                                    {onStartFocus && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onStartFocus(linkedPonto);
+                                        }}
+                                        className="p-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors cursor-pointer text-[9px] font-bold inline-flex items-center gap-0.5"
+                                        title="Iniciar sessão de foco neste tópico"
+                                      >
+                                        <Play className="w-2.5 h-2.5 fill-amber-700" />
+                                        <span>Foco</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {linkedPonto.artigosLei && (
+                                  <div className="text-[10px] text-zinc-500 font-mono truncate">
+                                    {linkedPonto.artigosLei}
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -820,7 +1101,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                                   : 'bg-emerald-50/90 border-emerald-300 text-emerald-950 hover:border-emerald-400'
                               }`}>
                                 <div className="flex items-center justify-between gap-1 mb-0.5 overflow-hidden">
-                                  <span className={`inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-bold font-mono uppercase px-1 py-0.2 rounded shrink-0 whitespace-nowrap truncate max-w-full ${
+                                  <span className={`inline-flex items-center gap-1 text-[8px] sm:text-[9px] font-bold font-mono uppercase px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap truncate max-w-full ${
                                     block.categoria === 'trabalho'
                                       ? 'bg-amber-200/70 text-amber-900'
                                       : block.categoria === 'estudo'
@@ -854,7 +1135,7 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
                                 )}
 
                                 {block.categoria === 'estudo' && block.tipoEstudo && (
-                                  <span className={`inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-bold uppercase px-1 py-0.2 rounded mt-1 shrink-0 ${
+                                  <span className={`inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mt-1 shrink-0 ${
                                     block.tipoEstudo === 'doutrina'
                                       ? 'bg-zinc-100 text-zinc-800 border border-zinc-200'
                                       : block.tipoEstudo === 'lei_seca'
@@ -875,12 +1156,50 @@ export const WeeklyScheduleView: React.FC<WeeklyScheduleViewProps> = ({
 
                                 {linkedPonto && (
                                   <div 
-                                    className="text-[9px] bg-white/75 border border-blue-200 text-blue-900 rounded px-1.5 py-0.5 mt-1 flex items-center gap-1 max-w-full"
+                                    className="text-[9px] bg-white/90 border border-blue-200 text-blue-900 rounded px-1.5 py-0.5 mt-1 flex items-center justify-between gap-1 max-w-full"
                                     title={`Tópico: ${linkedPonto.titulo}`}
                                   >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                                    <span className="font-semibold truncate">Tópico: {linkedPonto.titulo}</span>
-                                    {linkedPonto.lido && <span className="text-emerald-600 font-bold ml-auto text-[9px] shrink-0">✓</span>}
+                                    <div 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSelectPonto?.(linkedPonto);
+                                      }}
+                                      className="flex items-center gap-1 min-w-0 cursor-pointer hover:underline"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                                      <span className="font-semibold truncate text-[9px]">{linkedPonto.titulo}</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-0.5 shrink-0">
+                                      {onUpdatePonto && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onUpdatePonto(linkedPonto.id, { lido: !linkedPonto.lido });
+                                          }}
+                                          className={`px-1 py-0.2 rounded text-[8px] font-bold cursor-pointer transition-colors ${
+                                            linkedPonto.lido ? 'bg-emerald-600 text-white' : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300'
+                                          }`}
+                                          title={linkedPonto.lido ? "Estudado! Clique para desmarcar" : "Marcar estudado"}
+                                        >
+                                          {linkedPonto.lido ? '✓' : 'Feito'}
+                                        </button>
+                                      )}
+                                      {onStartFocus && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onStartFocus(linkedPonto);
+                                          }}
+                                          className="p-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 cursor-pointer"
+                                          title="Iniciar sessão de foco"
+                                        >
+                                          <Play className="w-2 h-2 fill-amber-700" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
 

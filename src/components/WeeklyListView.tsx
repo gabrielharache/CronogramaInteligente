@@ -213,7 +213,7 @@ export const WeeklyListView: React.FC<WeeklyListViewProps> = ({
 
                   {isCurrentWeek && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#831843] text-white uppercase tracking-wider">
-                      agora
+                      Semana Atual
                     </span>
                   )}
                 </div>

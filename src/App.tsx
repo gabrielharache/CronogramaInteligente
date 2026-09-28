@@ -1606,6 +1606,12 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
               materiasCores={state.materiasCores}
               onUpdateGrade={handleUpdateGrade}
               pontos={activeSchedulePoints}
+              onUpdatePonto={handleUpdatePonto}
+              onStartFocus={handleStartFocus}
+              onSelectPonto={(p) => {
+                setDetailPonto(p);
+                setIsDetailModalOpen(true);
+              }}
             />
           )}
 

@@ -55,7 +55,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     if (activeCronogramaObj?.dataProva) {
       return {
         date: activeCronogramaObj.dataProva,
-        title: `Prova: ${activeCronogramaObj.nome}`,
+        title: activeCronogramaObj.nome,
         subTitle: activeCronogramaObj.descricao || 'Data do Exame',
         isActive: true,
         cor: activeCronogramaObj.cor || '#8C1C2C',
@@ -68,7 +68,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       if (linked?.dataProva) {
         return {
           date: linked.dataProva,
-          title: `🏆 PROVA: ${linked.nome}`,
+          title: linked.nome,
           subTitle: linked.cargo || 'Edital',
           isActive: true,
           cor: '#831843',
@@ -81,7 +81,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     if (upcoming?.dataProva) {
       return {
         date: upcoming.dataProva,
-        title: `🏆 PROVA: ${upcoming.nome}`,
+        title: upcoming.nome,
         subTitle: upcoming.cargo || 'Edital',
         isActive: true,
         cor: '#831843',
@@ -152,7 +152,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           addedKeys.add(key);
           list.push({
             date: c.dataProva,
-            title: `Prova: ${c.nome}`,
+            title: c.nome,
             subTitle: c.descricao || 'Data do Exame',
             isActive: isThisActive || activeCronogramaId === 'all',
             cor: c.cor || '#8C1C2C',
@@ -172,7 +172,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           addedKeys.add(key);
           list.push({
             date: e.dataProva,
-            title: `🏆 PROVA: ${e.nome}`,
+            title: e.nome,
             subTitle: e.cargo || 'Edital',
             isActive: isLinkedToActive || activeCronogramaId === 'all',
             cor: '#831843',
@@ -236,6 +236,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     });
     return map;
   }, [pontos]);
+
+  // Format month and year label cleanly (e.g. "Agosto 2026")
+  const formatMonthLabel = (ym: string) => {
+    const [y, m] = ym.split('-');
+    const idx = parseInt(m, 10) - 1;
+    return `${MESES_PT[idx]} ${y}`;
+  };
 
   // Month navigation helpers
   const handlePrevMonth = () => {
@@ -366,11 +373,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               {monthStr}
             </div>
             <div>
-              <h3 className="font-sans font-bold text-xl sm:text-2xl text-zinc-900 tracking-tight capitalize">
-                {MESES_PT[month - 1]} de {year}
+              <h3 className="font-sans font-bold text-xl sm:text-2xl text-zinc-900 tracking-tight">
+                {MESES_PT[month - 1]} {year}
               </h3>
               <p className="text-xs text-zinc-500">
-                {monthTotalPoints === 0 ? 'Nenhum tópico agendado neste mês' : `${monthTotalPoints} tópicos de estudo programados`}
+                {monthTotalPoints === 0 
+                  ? 'Nenhum tópico agendado neste mês' 
+                  : `${monthTotalPoints} ${monthTotalPoints === 1 ? 'tópico de estudo programado' : 'tópicos de estudo programados'}`}
               </p>
             </div>
           </div>
@@ -463,7 +472,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           isToday
                             ? 'bg-zinc-900 text-white shadow-2xs'
                             : hasActiveExam
-                            ? 'bg-rose-600 text-white font-extrabold shadow-3xs animate-pulse'
+                            ? 'bg-rose-600 text-white font-extrabold shadow-3xs'
                             : allDone
                             ? 'bg-emerald-100 text-emerald-900 font-bold'
                             : 'text-zinc-800 bg-zinc-100'
@@ -476,7 +485,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           </span>
                         )}
                         {hasActiveExam && (
-                          <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded animate-bounce">
+                          <span className="text-[9px] font-sans font-bold uppercase tracking-wider text-rose-700 bg-rose-100/90 border border-rose-200 px-1.5 py-0.5 rounded">
                             PROVA
                           </span>
                         )}
@@ -516,7 +525,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 {ev.isActive ? 'PROVA ATIVA' : 'OUTRA PROVA'}
                               </div>
                               <div className="text-[10px] leading-tight font-extrabold truncate text-rose-900">
-                                {ev.title.replace('🏆 PROVA:', '').replace('Prova:', '').trim()}
+                                {ev.title}
                               </div>
                               {ev.subTitle && (
                                 <div className="text-[8px] font-normal opacity-80 truncate text-zinc-600">
@@ -577,7 +586,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               }`}>
                                 <span>{p.titulo}</span>
                                 {partStr && (
-                                  <span className="inline-flex items-center text-[9px] font-sans font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-1 py-0.2 rounded-xs">
+                                  <span className="inline-flex items-center text-[9px] font-sans font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-sm">
                                     {partStr}
                                   </span>
                                 )}
@@ -810,7 +819,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 bg-white hover:bg-zinc-50 rounded-full border border-zinc-200 shadow-2xs transition-colors cursor-pointer"
             >
               <ChevronUp className="w-3.5 h-3.5" />
-              <span>Carregar mês anterior ({shiftMonth(visibleMonths[0] || currentYearMonth, -1)})</span>
+              <span>Carregar mês anterior ({formatMonthLabel(shiftMonth(visibleMonths[0] || currentYearMonth, -1))})</span>
             </button>
           </div>
 
@@ -823,7 +832,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-zinc-700 hover:text-zinc-900 bg-white hover:bg-zinc-50 rounded-xl border border-zinc-200 shadow-2xs transition-colors cursor-pointer"
             >
               <ChevronDown className="w-4 h-4" />
-              <span>Carregar próximo mês ({shiftMonth(visibleMonths[visibleMonths.length - 1] || currentYearMonth, 1)})</span>
+              <span>Carregar próximo mês ({formatMonthLabel(shiftMonth(visibleMonths[visibleMonths.length - 1] || currentYearMonth, 1))})</span>
             </button>
           </div>
         </div>

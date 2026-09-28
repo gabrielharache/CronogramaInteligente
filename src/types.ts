@@ -2,6 +2,30 @@ export type Dificuldade = 'facil' | 'medio' | 'dificil' | null;
 
 export type TipoEstudo = 'doutrina' | 'lei_seca' | 'jurisprudencia';
 
+export type TipoRevisaoEspacada = '24h' | '7d' | '30d' | '60d' | 'personalizada';
+
+export interface RevisaoAgendada {
+  id: string;
+  tipo: TipoRevisaoEspacada;
+  dataPrevista: string; // YYYY-MM-DD
+  concluida: boolean;
+  concluidaEm?: string; // YYYY-MM-DD
+  notas?: string;
+  createdAt?: number;
+}
+
+export interface BateriaQuestoes {
+  id: string;
+  data: string; // YYYY-MM-DD
+  qAcertos: number;
+  qTotal: number;
+  pct: number;
+  dif?: Dificuldade;
+  tipo?: string; // e.g. "1ª Bateria", "Revisão 24h", "Revisão 7d", "Simulado"
+  notas?: string;
+  createdAt: number;
+}
+
 export interface SubTopico {
   id: string;
   titulo: string;
@@ -34,8 +58,12 @@ export interface PontoEstudo {
   qTotal: number | "";
   qAcertos: number | "";
   dif: Dificuldade;
+  historicoQuestoes?: BateriaQuestoes[]; // Histórico cumulativo de baterias de questões
+  revisoesEspacadas?: RevisaoAgendada[]; // Régua de repetições espaçadas (não polui o calendário)
   showNotes?: boolean;
   showChecklist?: boolean;
+  showEvolution?: boolean;
+  showSpacedRepetition?: boolean;
   ordem?: number; // Ordem lógica / sequência pedagógica no edital
   subTopicos?: SubTopico[];
   createdAt?: number;

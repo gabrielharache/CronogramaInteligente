@@ -1,4 +1,4 @@
-import { PontoEstudo, Dificuldade } from '../types';
+import { PontoEstudo, Dificuldade, BateriaQuestoes, RevisaoAgendada, TipoRevisaoEspacada } from '../types';
 
 export const MESES_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -85,12 +85,12 @@ export function formatarDataCompleta(dataStr?: string): string {
   return `${nomeCompleto}, ${parseInt(d, 10)} de ${MESES_PT[mesIndex]} de ${y}`;
 }
 
-export function mesAnoLabel(dataStr?: string): string {
+export function mesAnoLabel(dataStr?: string, comDe: boolean = false): string {
   if (!dataStr) return "Sem data";
   const [y, m] = dataStr.split("-");
   if (!y || !m) return "Sem data";
   const mesIndex = parseInt(m, 10) - 1;
-  return `${MESES_PT[mesIndex]} de ${y}`;
+  return comDe ? `${MESES_PT[mesIndex]} de ${y}` : `${MESES_PT[mesIndex]} ${y}`;
 }
 
 export function getWeekStart(dataStr: string): string {
@@ -206,6 +206,209 @@ export function getDificuldadeInfo(dif: Dificuldade): {
     badgeText: 'text-zinc-500',
     dotColor: 'bg-zinc-400',
     desc: 'Não classificado'
+  };
+}
+
+export interface EvolucaoInfo {
+  delta: number | null; // e.g. +15 or -10
+  trend: 'up' | 'down' | 'stable' | 'single' | 'none';
+  totalBaterias: number;
+  primeira?: BateriaQuestoes;
+  ultima?: BateriaQuestoes;
+  penultima?: BateriaQuestoes;
+  melhor?: BateriaQuestoes;
+  pior?: BateriaQuestoes;
+  mediaGeral: number | null;
+  totalQuestoes: number;
+  totalAcertos: number;
+}
+
+export function calcularEvolucaoQuestoes(historico?: BateriaQuestoes[]): EvolucaoInfo {
+  if (!historico || historico.length === 0) {
+    return {
+      delta: null,
+      trend: 'none',
+      totalBaterias: 0,
+      mediaGeral: null,
+      totalQuestoes: 0,
+      totalAcertos: 0
+    };
+  }
+
+  // Ordenar por data ou createdAt
+  const sorted = [...historico].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  const totalBaterias = sorted.length;
+  const primeira = sorted[0];
+  const ultima = sorted[totalBaterias - 1];
+  const penultima = totalBaterias >= 2 ? sorted[totalBaterias - 2] : undefined;
+
+  let totalQuestoes = 0;
+  let totalAcertos = 0;
+  let melhor = sorted[0];
+  let pior = sorted[0];
+
+  sorted.forEach(b => {
+    totalQuestoes += b.qTotal;
+    totalAcertos += b.qAcertos;
+    if (b.pct > melhor.pct) melhor = b;
+    if (b.pct < pior.pct) pior = b;
+  });
+
+  const mediaGeral = totalQuestoes > 0 ? Math.round((totalAcertos / totalQuestoes) * 100) : null;
+
+  if (totalBaterias === 1) {
+    return {
+      delta: null,
+      trend: 'single',
+      totalBaterias: 1,
+      primeira,
+      ultima,
+      melhor,
+      pior,
+      mediaGeral,
+      totalQuestoes,
+      totalAcertos
+    };
+  }
+
+  const delta = penultima ? (ultima.pct - penultima.pct) : (ultima.pct - primeira.pct);
+  let trend: 'up' | 'down' | 'stable' = 'stable';
+  if (delta > 0) trend = 'up';
+  else if (delta < 0) trend = 'down';
+
+  return {
+    delta,
+    trend,
+    totalBaterias,
+    primeira,
+    ultima,
+    penultima,
+    melhor,
+    pior,
+    mediaGeral,
+    totalQuestoes,
+    totalAcertos
+  };
+}
+
+export const REVISOES_ESPACADAS_CONFIG: Record<TipoRevisaoEspacada, {
+  label: string;
+  dias: number;
+  descricao: string;
+  badgeClass: string;
+}> = {
+  '24h': {
+    label: 'R24h',
+    dias: 1,
+    descricao: '1 dia após o estudo (retenção imediata)',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200'
+  },
+  '7d': {
+    label: 'R7d',
+    dias: 7,
+    descricao: '7 dias após o estudo (consolidação semanal)',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  },
+  '30d': {
+    label: 'R30d',
+    dias: 30,
+    descricao: '30 dias após o estudo (memória de médio prazo)',
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200'
+  },
+  '60d': {
+    label: 'R60d',
+    dias: 60,
+    descricao: '60 dias após o estudo (memória de longo prazo)',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200'
+  },
+  'personalizada': {
+    label: 'Personalizada',
+    dias: 0,
+    descricao: 'Data de revisão personalizada',
+    badgeClass: 'bg-zinc-100 text-zinc-700 border-zinc-200'
+  }
+};
+
+export function gerarRevisoesCiclo(dataBase: string, tipos: TipoRevisaoEspacada[] = ['24h', '7d', '30d', '60d']): RevisaoAgendada[] {
+  const base = dataBase || hojeStr();
+  return tipos.map(tipo => {
+    const config = REVISOES_ESPACADAS_CONFIG[tipo];
+    const dataPrevista = addDays(base, config.dias);
+    return {
+      id: uid(),
+      tipo,
+      dataPrevista,
+      concluida: false,
+      createdAt: Date.now()
+    };
+  });
+}
+
+export function calcularStatusRevisao(
+  rev: RevisaoAgendada,
+  hojeRef: string = hojeStr()
+): {
+  status: 'concluida' | 'hoje' | 'atrasada' | 'proxima';
+  label: string;
+  badgeClass: string;
+  diasDiff: number;
+} {
+  if (rev.concluida) {
+    return {
+      status: 'concluida',
+      label: rev.concluidaEm ? `Concluída (${formatarDataBr(rev.concluidaEm)})` : 'Concluída',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      diasDiff: 0
+    };
+  }
+
+  if (!rev.dataPrevista) {
+    return {
+      status: 'proxima',
+      label: 'Pendente',
+      badgeClass: 'bg-zinc-100 text-zinc-600 border-zinc-200',
+      diasDiff: 0
+    };
+  }
+
+  const d1 = new Date(hojeRef + 'T12:00:00');
+  const d2 = new Date(rev.dataPrevista + 'T12:00:00');
+  const diffTime = d2.getTime() - d1.getTime();
+  const diasDiff = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diasDiff === 0) {
+    return {
+      status: 'hoje',
+      label: 'Hoje!',
+      badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 font-bold animate-pulse',
+      diasDiff: 0
+    };
+  }
+
+  if (diasDiff < 0) {
+    const atraso = Math.abs(diasDiff);
+    return {
+      status: 'atrasada',
+      label: atraso === 1 ? 'Atrasada há 1 dia' : `Atrasada há ${atraso} dias`,
+      badgeClass: 'bg-rose-100 text-rose-800 border-rose-300 font-semibold',
+      diasDiff
+    };
+  }
+
+  if (diasDiff === 1) {
+    return {
+      status: 'proxima',
+      label: 'Amanhã',
+      badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+      diasDiff: 1
+    };
+  }
+
+  return {
+    status: 'proxima',
+    label: `Em ${diasDiff} dias (${formatarDataBr(rev.dataPrevista)})`,
+    badgeClass: 'bg-zinc-100 text-zinc-700 border-zinc-200',
+    diasDiff
   };
 }
 

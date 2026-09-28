@@ -1601,7 +1601,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                           }`}
                         >
                           <span>Semana {w.semanaNumero}</span>
-                          <span className={`text-[10px] px-1 py-0.2 rounded font-normal ${
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-normal ${
                             isSelected ? 'bg-zinc-700 text-zinc-200' : 'bg-zinc-200 text-zinc-600'
                           }`}>
                             {isOdd ? 'Ímpar (A)' : 'Par (B)'}
@@ -2103,11 +2103,15 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                           </p>
                         )}
                         <div className="flex items-center gap-3 text-[10px] text-zinc-500 pt-0.5 flex-wrap">
-                          <span>Modo: <strong className="text-zinc-700 capitalize">{p.distributionMode}</strong></span>
+                          <span>Modo: <strong className="text-zinc-700">
+                            {p.distributionMode === 'smart_cycle' ? 'Ciclo Inteligente' : p.distributionMode === 'cycle' ? 'Ciclo Tradicional' : 'Sequencial'}
+                          </strong></span>
                           <span>•</span>
                           <span>Ritmo: <strong className="text-zinc-700">{p.topicsPerDay} tópicos/dia</strong></span>
                           <span>•</span>
-                          <span>Dias: <strong className="text-zinc-700">{p.studyDaysMode}</strong></span>
+                          <span>Dias: <strong className="text-zinc-700">
+                            {p.studyDaysMode === 'seg-sab' ? 'Seg a Sáb' : p.studyDaysMode === 'seg-sex' ? 'Seg a Sex' : p.studyDaysMode === 'todos' ? 'Todos os dias' : p.studyDaysMode}
+                          </strong></span>
                         </div>
                       </div>
 

@@ -381,7 +381,7 @@ export const PontoModal: React.FC<PontoModalProps> = ({
                       Data planejada
                     </label>
                     {data && (
-                      <span className="text-[10px] font-bold text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded">
+                      <span className="text-[10px] font-bold text-zinc-700 bg-zinc-100 px-1.5 py-0.5 rounded">
                         {getDiaDaSemana(data).nomeCompleto}
                       </span>
                     )}

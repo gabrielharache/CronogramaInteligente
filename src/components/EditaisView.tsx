@@ -323,7 +323,7 @@ export const EditaisView: React.FC<EditaisViewProps> = ({
                           {linkedCronograma ? linkedCronograma.nome : 'Nenhum cronograma vinculado'}
                         </span>
                         {linkedCronograma && (
-                          <span className="text-[11px] font-mono text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                          <span className="text-[11px] font-mono text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
                             {pct}% concluído
                           </span>
                         )}

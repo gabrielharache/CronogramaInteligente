@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppState, TabMode } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { calcularDificuldadeAutomatica, calcularPercentualAcerto } from '../utils/helpers';
+import { calcularDificuldadeAutomatica, calcularPercentualAcerto, hojeStr } from '../utils/helpers';
 import { 
   BookOpen, 
   Clock, 
@@ -150,13 +150,20 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const lidosCount = pontos.filter(p => p.lido).length;
   const effectiveEditaisCount = editaisCount ?? editais.length;
 
-  // Calculate points needing revision
-  const revisionCount = (pontos || []).filter(p => {
+  // Calculate points needing revision (due/overdue spaced repetitions + radar issues)
+  const spacedPendingToday = (pontos || []).reduce((acc, p) => {
+    const pendentes = (p.revisoesEspacadas || []).filter(r => !r.concluida && r.dataPrevista && r.dataPrevista <= hoje).length;
+    return acc + pendentes;
+  }, 0);
+
+  const radarCriticalCount = (pontos || []).filter(p => {
     if (!p.lido) return false;
     const difAuto = calcularDificuldadeAutomatica(p);
     const pct = calcularPercentualAcerto(p);
     return difAuto === 'dificil' || (difAuto === 'medio' && pct !== null);
   }).length;
+
+  const revisionCount = spacedPendingToday > 0 ? spacedPendingToday : radarCriticalCount;
 
   // Nav Items configuration
   const navItems = [

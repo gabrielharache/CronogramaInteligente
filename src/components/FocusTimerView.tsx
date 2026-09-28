@@ -822,11 +822,11 @@ export const FocusTimerView: React.FC<FocusTimerViewProps> = ({
                         <span className="text-[10px] text-zinc-400 font-mono">
                           {formatarDataBr(sessao.data)}
                         </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-200/60 text-zinc-700 uppercase">
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-200/60 text-zinc-700 uppercase">
                           {sessao.tipoTimer}
                         </span>
                         {sessao.tipoEstudo && (
-                          <span className={`text-[9px] font-bold font-sans px-1.5 py-0.2 rounded uppercase tracking-wider border shrink-0 ${
+                          <span className={`text-[9px] font-bold font-sans px-1.5 py-0.5 rounded uppercase tracking-wider border shrink-0 ${
                             sessao.tipoEstudo === 'doutrina'
                               ? 'bg-zinc-100 text-zinc-800 border-zinc-200'
                               : sessao.tipoEstudo === 'lei_seca'

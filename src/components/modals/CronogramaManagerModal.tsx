@@ -249,7 +249,7 @@ export const CronogramaManagerModal: React.FC<CronogramaManagerModalProps> = ({
                             Todos os cronogramas combinados
                           </h4>
                           {activeCronogramaId === 'all' && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-zinc-900 text-white">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-900 text-white">
                               Ativo
                             </span>
                           )}
@@ -296,7 +296,7 @@ export const CronogramaManagerModal: React.FC<CronogramaManagerModalProps> = ({
                               {c.nome}
                             </h4>
                             {isActive && (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-zinc-900 text-white">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-900 text-white">
                                 Ativo
                               </span>
                             )}
@@ -541,11 +541,11 @@ export const CronogramaManagerModal: React.FC<CronogramaManagerModalProps> = ({
                               {edital.nome}
                             </h4>
                             {edital.banca && (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] bg-zinc-100 text-zinc-700 border border-zinc-200">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-100 text-zinc-700 border border-zinc-200">
                                 Banca: {edital.banca}
                               </span>
                             )}
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700">
                               {edital.status}
                             </span>
                           </div>
@@ -559,7 +559,7 @@ export const CronogramaManagerModal: React.FC<CronogramaManagerModalProps> = ({
                             {edital.dataProva && (
                               <>
                                 <span>•</span>
-                                <span className="inline-flex items-center gap-1 font-mono text-zinc-700 bg-zinc-100 px-1.5 py-0.2 rounded">
+                                <span className="inline-flex items-center gap-1 font-mono text-zinc-700 bg-zinc-100 px-1.5 py-0.5 rounded">
                                   <Calendar className="w-3 h-3 text-zinc-500" />
                                   Data: {formatarDataBr(edital.dataProva)}
                                   {diasInfo && (
@@ -572,7 +572,7 @@ export const CronogramaManagerModal: React.FC<CronogramaManagerModalProps> = ({
                             {linkedCro && (
                               <>
                                 <span>•</span>
-                                <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded">
+                                <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded">
                                   <Layers className="w-3 h-3 text-emerald-600" />
                                   Cronograma: {linkedCro.nome}
                                 </span>
