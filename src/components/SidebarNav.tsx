@@ -226,7 +226,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                 </div>
                 <div className="min-w-0">
                   <h1 className="font-serif font-bold text-sm tracking-tight text-zinc-900 truncate">
-                    Estante de Estudos
+                    Cronograma Inteligente
                   </h1>
                   <p className="text-[9px] uppercase font-mono tracking-wider text-zinc-400 truncate">
                     Painel de Organização

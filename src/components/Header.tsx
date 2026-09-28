@@ -25,8 +25,6 @@ import {
   CheckCircle2,
   Menu,
   CalendarDays,
-  PanelLeftClose,
-  PanelLeft,
   Flame
 } from 'lucide-react';
 import { formatarDataBr, hojeStr } from '../utils/helpers';
@@ -54,8 +52,6 @@ interface HeaderProps {
   onManualSave?: () => void;
   onDiscardChanges?: () => void;
   onOpenMobileMenu?: () => void;
-  isCollapsed?: boolean;
-  onToggleCollapse?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -79,9 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
   autoSaveCountdown = null,
   onManualSave,
   onDiscardChanges,
-  onOpenMobileMenu,
-  isCollapsed = false,
-  onToggleCollapse
+  onOpenMobileMenu
 }) => {
   const { user, signOut, isGuest, isConfigured } = useAuth();
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -193,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="border-b border-zinc-200/80 bg-[#f7f7f5]">
       {/* Top Navbar */}
       <div className="border-b border-zinc-200/80 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 flex-wrap">
-        {/* Left: Mobile Menu Toggle, Desktop Sidebar Toggle & Current Section Indicator */}
+        {/* Left: Mobile Menu Toggle & Current Section Indicator */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
           {/* Mobile Menu Button */}
           {onOpenMobileMenu && (
@@ -204,18 +198,6 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="Abrir menu lateral"
             >
               <Menu className="w-5 h-5" />
-            </button>
-          )}
-
-          {/* Desktop Sidebar Collapse Toggle */}
-          {onToggleCollapse && (
-            <button
-              onClick={onToggleCollapse}
-              className="hidden md:flex p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/70 transition-colors cursor-pointer"
-              title={isCollapsed ? "Expandir barra lateral" : "Recolher barra lateral (apenas ícones)"}
-              aria-label={isCollapsed ? "Expandir barra lateral" : "Recolher barra lateral"}
-            >
-              {isCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
           )}
 

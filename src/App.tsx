@@ -1455,8 +1455,6 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
           onManualSave={handleManualSave}
           onDiscardChanges={handleDiscardChanges}
           onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
         />
 
         {/* Main Content Area */}
@@ -1692,7 +1690,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
         <footer className="mt-auto border-t border-zinc-200/80 bg-white py-4 px-4 sm:px-6 text-xs text-zinc-500">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>
-              Estante de Estudos • Cronograma por Edital, Doutrina, Lei Seca & Jurisprudência
+              Cronograma Inteligente • Cronograma por Edital, Doutrina, Lei Seca & Jurisprudência
             </span>
             <div className="flex items-center gap-3">
               <button
