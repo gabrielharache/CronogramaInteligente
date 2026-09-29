@@ -91,7 +91,7 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
         else if (filterPeriod === '30d') cutoffDate.setDate(cutoffDate.getDate() - 30);
         else if (filterPeriod === '90d') cutoffDate.setDate(cutoffDate.getDate() - 90);
 
-        const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+        const cutoffStr = hojeStr(cutoffDate);
         result = result.filter(p => p.data && p.data >= cutoffStr);
       }
     }
@@ -126,7 +126,7 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
         else if (filterPeriod === '30d') cutoffDate.setDate(cutoffDate.getDate() - 30);
         else if (filterPeriod === '90d') cutoffDate.setDate(cutoffDate.getDate() - 90);
 
-        const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+        const cutoffStr = hojeStr(cutoffDate);
         result = result.filter(s => s.data && s.data >= cutoffStr);
       }
     }
@@ -170,7 +170,7 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
         monday,
         sunday,
         label,
-        key: monday.toISOString().slice(0, 10)
+        key: hojeStr(monday)
       };
     });
   }, []);

@@ -1,6 +1,6 @@
 import { AppState, PontoEstudo, Edital, Cronograma, BlocoHorario, SessaoEstudo } from '../types';
 import { DEFAULT_SUBJECT_COLORS, RAW_SEED_PONTOS, RAW_SEED_EDITAIS, DEFAULT_CRONOGRAMAS } from '../data/seed';
-import { uid } from './helpers';
+import { uid, hojeStr } from './helpers';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const GUEST_STORAGE_KEY = 'estante_estudos_app_v4';
@@ -313,6 +313,10 @@ export function validateState(parsed: any, fallbackToEmpty = false): AppState {
     dif: p.dif || null,
     showNotes: Boolean(p.showNotes),
     showChecklist: p.showChecklist !== undefined ? Boolean(p.showChecklist) : undefined,
+    showEvolution: p.showEvolution !== undefined ? Boolean(p.showEvolution) : undefined,
+    showSpacedRepetition: p.showSpacedRepetition !== undefined ? Boolean(p.showSpacedRepetition) : undefined,
+    historicoQuestoes: Array.isArray(p.historicoQuestoes) ? p.historicoQuestoes : undefined,
+    revisoesEspacadas: Array.isArray(p.revisoesEspacadas) ? p.revisoesEspacadas : undefined,
     subTopicos: Array.isArray(p.subTopicos) ? p.subTopicos : undefined,
     ordem: calculatedOrdemMap.get(p) ?? (idx + 1),
     createdAt: p.createdAt || Date.now(),
@@ -498,7 +502,7 @@ export function exportBackup(state: AppState): void {
   const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = hojeStr();
   a.href = url;
   a.download = `meu-cronograma-backup-${dateStr}.json`;
   a.click();

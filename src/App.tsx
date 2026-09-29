@@ -1,19 +1,15 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { AppState, PontoEstudo, Edital, EditalStatus, TabMode, ViewMode, TipoEstudo, Cronograma, BlocoHorario, SessaoEstudo } from './types';
-import { 
-  loadLocalUserState, 
-  fetchUserState, 
-  saveUserState, 
-  saveLocalUserState, 
-  saveCloudUserState, 
-  exportBackup, 
-  getInitialState, 
-  getEmptyUserState 
-} from './utils/storage';
-import { uid, hojeStr, addDays, parseEditalMarkdown, parseMarkdownStudyPoints, distributePlannedDates, SmartEditalHierarchy, calcularDificuldadeAutomatica } from './utils/helpers';
-import confetti from 'canvas-confetti';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { AppState, PontoEstudo, Edital, TipoEstudo, BlocoHorario } from './types';
+import { loadLocalUserState, exportBackup } from './utils/storage';
+import { SmartEditalHierarchy, calcularDificuldadeAutomatica } from './utils/helpers';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AuthPage } from './components/auth/AuthPage';
+import { useFocusTimer } from './hooks/useFocusTimer';
+import { useCloudSync } from './hooks/useCloudSync';
+import { usePontos } from './hooks/usePontos';
+import { useEditais } from './hooks/useEditais';
+import { useCronogramas } from './hooks/useCronogramas';
+import { useMaterias } from './hooks/useMaterias';
 
 // Components
 import { Header } from './components/Header';
@@ -88,10 +84,6 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
   const [splittingPonto, setSplittingPonto] = useState<PontoEstudo | null>(null);
 
-  // Focus configuration states
-  const [focusTargetPonto, setFocusTargetPonto] = useState<PontoEstudo | null>(null);
-  const [isFocusDurationModalOpen, setIsFocusDurationModalOpen] = useState(false);
-
   const [isReorganizeModalOpen, setIsReorganizeModalOpen] = useState(false);
   const [isSubjectManagerOpen, setIsSubjectManagerOpen] = useState(false);
   const [importTargetEdital, setImportTargetEdital] = useState<Edital | null>(null);
@@ -108,263 +100,31 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     }));
   }, []);
 
-  // Active Focus Timer state managed at App level so it continues running across tabs
-  const [activeTimer, setActiveTimer] = useState<{
-    isRunning: boolean;
-    mode: 'cronometro' | 'pomodoro' | 'pausa';
-    secondsElapsed: number;
-    targetSeconds: number;
-    materia: string;
-    assunto: string;
-    pontoId?: string;
-    cronogramaId?: string;
-    marcarComoLido: boolean;
-    notas: string;
-    tipoEstudo?: TipoEstudo;
-  }>({
-    isRunning: false,
-    mode: 'pomodoro',
-    secondsElapsed: 0,
-    targetSeconds: 50 * 60,
-    materia: '',
-    assunto: '',
-    marcarComoLido: true,
-    notas: ''
-  });
+  const {
+    activeTimer,
+    startTimer,
+    pauseTimer,
+    resumeTimer,
+    resetTimer,
+    focusTargetPonto,
+    isFocusDurationModalOpen,
+    handleStartFocus,
+    handleCloseFocusDuration,
+    handleConfirmStartFocus,
+    handleSaveSessao,
+    handleUpdateSessao,
+    handleDeleteSessao
+  } = useFocusTimer(setState);
 
-  useEffect(() => {
-    if (!activeTimer.isRunning) return;
-    const interval = setInterval(() => {
-      setActiveTimer(prev => {
-        if (!prev.isRunning) return prev;
-        return { ...prev, secondsElapsed: prev.secondsElapsed + 1 };
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [activeTimer.isRunning]);
-
-  const handleStartFocus = useCallback((ponto: PontoEstudo) => {
-    setFocusTargetPonto(ponto);
-    setIsFocusDurationModalOpen(true);
-  }, []);
-
-  const handleConfirmStartFocus = useCallback((minutes: number, mode: 'pomodoro' | 'cronometro') => {
-    if (!focusTargetPonto) return;
-    setActiveTimer({
-      isRunning: true,
-      mode: mode,
-      secondsElapsed: 0,
-      targetSeconds: minutes * 60,
-      materia: focusTargetPonto.materia,
-      assunto: focusTargetPonto.titulo,
-      pontoId: focusTargetPonto.id,
-      cronogramaId: focusTargetPonto.cronogramaId,
-      marcarComoLido: true,
-      notas: focusTargetPonto.notas || '',
-      tipoEstudo: focusTargetPonto.tipoEstudo
-    });
-    setIsFocusDurationModalOpen(false);
-    setFocusTargetPonto(null);
-    setState(prev => ({
-      ...prev,
-      ui: { ...prev.ui, activeTab: 'foco' }
-    }));
-  }, [focusTargetPonto]);
-
-  const handleDeleteSessao = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      sessoesEstudo: (prev.sessoesEstudo || []).filter(s => s.id !== id)
-    }));
-  }, []);
-
-  const handleUpdateSessao = useCallback((id: string, updated: Partial<SessaoEstudo>) => {
-    setState(prev => ({
-      ...prev,
-      sessoesEstudo: (prev.sessoesEstudo || []).map(s => s.id === id ? { ...s, ...updated } : s)
-    }));
-  }, []);
-
-  const handleSaveSessao = useCallback((novaSessaoData: Omit<SessaoEstudo, 'id'>, marcarPontoLidoId?: string) => {
-    setState(prev => {
-      let cronogramaId = novaSessaoData.cronogramaId;
-      if (!cronogramaId && novaSessaoData.pontoId) {
-        const associatedPoint = prev.pontos.find(p => p.id === novaSessaoData.pontoId);
-        if (associatedPoint) {
-          cronogramaId = associatedPoint.cronogramaId;
-        }
-      }
-      if (!cronogramaId && prev.activeCronogramaId && prev.activeCronogramaId !== 'all') {
-        cronogramaId = prev.activeCronogramaId;
-      }
-      if (!cronogramaId && prev.cronogramas.length > 0) {
-        const matchingPoint = prev.pontos.find(p => p.materia === novaSessaoData.materia);
-        if (matchingPoint && matchingPoint.cronogramaId) {
-          cronogramaId = matchingPoint.cronogramaId;
-        } else {
-          cronogramaId = prev.cronogramas[0].id;
-        }
-      }
-
-      const novaSessao: SessaoEstudo = {
-        ...novaSessaoData,
-        cronogramaId,
-        id: uid()
-      };
-
-      let nextPontos = prev.pontos;
-      if (marcarPontoLidoId) {
-        nextPontos = prev.pontos.map(p => p.id === marcarPontoLidoId ? { ...p, lido: true } : p);
-      }
-      return {
-        ...prev,
-        pontos: nextPontos,
-        sessoesEstudo: [novaSessao, ...(prev.sessoesEstudo || [])]
-      };
-    });
-  }, []);
-
-  // State persistence: Auto-save at 30s, manual save, and revert capabilities
-  const [lastSavedState, setLastSavedState] = useState<AppState>(() => loadLocalUserState(userId));
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [autoSaveCountdown, setAutoSaveCountdown] = useState<number | null>(null);
-
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const lastSavedStateRef = useRef(lastSavedState);
-  lastSavedStateRef.current = lastSavedState;
-  const isSavingRef = useRef(isSaving);
-  isSavingRef.current = isSaving;
-
-  // Determine if there are pending unsaved changes compared to the cloud version
-  const hasUnsavedChanges = useMemo(() => {
-    return JSON.stringify(state) !== JSON.stringify(lastSavedState);
-  }, [state, lastSavedState]);
-
-  // Sync state with cloud when user logs in or mounts
-  useEffect(() => {
-    let isMounted = true;
-    if (userId) {
-      fetchUserState(userId).then(({ state: cloudState, updatedAt }) => {
-        if (isMounted && cloudState) {
-          setState(cloudState);
-          setLastSavedState(cloudState);
-          if (updatedAt) {
-            setLastSavedAt(new Date(updatedAt));
-          } else {
-            setLastSavedAt(new Date());
-          }
-        }
-      }).catch(err => {
-        console.error('Error fetching cloud state:', err);
-      });
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [userId]);
-
-  // Always update local storage draft immediately so browser refresh/crash never loses data
-  useEffect(() => {
-    saveLocalUserState(state, userId);
-  }, [state, userId]);
-
-  // Core save routine to Supabase
-  const executeCloudSave = useCallback(async (stateToSave: AppState) => {
-    if (isSavingRef.current) return;
-    setIsSaving(true);
-    try {
-      const res = await saveCloudUserState(stateToSave, userId);
-      if (res.success) {
-        setLastSavedState(stateToSave);
-        setLastSavedAt(res.updatedAt ? new Date(res.updatedAt) : new Date());
-        setAutoSaveCountdown(null);
-      }
-    } catch (err) {
-      console.error('Error saving state to Supabase:', err);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [userId]);
-
-  // Manual save trigger (Header button or Ctrl+S)
-  const handleManualSave = useCallback(() => {
-    if (!hasUnsavedChanges || isSavingRef.current) return;
-    executeCloudSave(stateRef.current);
-  }, [hasUnsavedChanges, executeCloudSave]);
-
-  // Revert/discard changes to last saved cloud state
-  const handleDiscardChanges = useCallback(() => {
-    if (!hasUnsavedChanges) return;
-    const restored = lastSavedStateRef.current;
-    setState(restored);
-    saveLocalUserState(restored, userId);
-    setAutoSaveCountdown(null);
-  }, [hasUnsavedChanges, userId]);
-
-  // 30-second Auto-save mechanism with visual countdown
-  useEffect(() => {
-    if (!hasUnsavedChanges) {
-      setAutoSaveCountdown(null);
-      return;
-    }
-
-    const AUTO_SAVE_SECONDS = 30;
-    setAutoSaveCountdown(AUTO_SAVE_SECONDS);
-
-    const countdownInterval = setInterval(() => {
-      setAutoSaveCountdown(prev => {
-        if (prev === null || prev <= 1) {
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    const autoSaveTimer = setTimeout(() => {
-      executeCloudSave(stateRef.current);
-    }, AUTO_SAVE_SECONDS * 1000);
-
-    return () => {
-      clearInterval(countdownInterval);
-      clearTimeout(autoSaveTimer);
-    };
-  }, [hasUnsavedChanges, state, executeCloudSave]);
-
-  // Shortcut: Ctrl+S / Cmd+S to save manually
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        if (hasUnsavedChanges && !isSavingRef.current) {
-          executeCloudSave(stateRef.current);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasUnsavedChanges, executeCloudSave]);
-
-  // Warn user when closing tab if there are unsaved cloud changes
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-        return '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
-  const handleResetToInitial = useCallback(async () => {
-    const initial = userId ? getEmptyUserState() : getInitialState();
-    setState(initial);
-    saveLocalUserState(initial, userId);
-    await executeCloudSave(initial);
-  }, [userId, executeCloudSave]);
+  const {
+    isSaving,
+    hasUnsavedChanges,
+    lastSavedAt,
+    autoSaveCountdown,
+    handleManualSave,
+    handleDiscardChanges,
+    handleResetToInitial
+  } = useCloudSync(state, setState, userId);
 
   // Filter points belonging to active schedule (or all if activeCronogramaId === 'all')
   const activeSchedulePoints = useMemo(() => {
@@ -494,353 +254,26 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   }, [state.cronogramas, state.activeCronogramaId]);
 
   // Point Operations
-  const handleUpdatePonto = useCallback((id: string, updated: Partial<PontoEstudo>) => {
-    setState(prev => {
-      const nextPontos = prev.pontos.map(p => {
-        if (p.id === id) {
-          const isBecomingFullyDone = (updated.lido ?? p.lido) && (updated.qFeitas ?? p.qFeitas) && !(p.lido && p.qFeitas);
-          if (isBecomingFullyDone) {
-            try {
-              confetti({
-                particleCount: 40,
-                spread: 55,
-                origin: { y: 0.8 },
-                colors: ['#18181B', '#059669', '#2563EB', '#D97706']
-              });
-            } catch (_) {}
-          }
-          const merged = { ...p, ...updated, updatedAt: Date.now() };
-          // Auto update dif if questions are updated
-          if (updated.qTotal !== undefined || updated.qAcertos !== undefined) {
-            merged.dif = calcularDificuldadeAutomatica(merged);
-          }
-          return merged;
-        }
-        return p;
-      });
-      return { ...prev, pontos: nextPontos };
-    });
-  }, []);
-
-  const handleDeletePonto = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      pontos: prev.pontos.filter(p => p.id !== id)
-    }));
-  }, []);
-
-  const handleMovePonto = useCallback((id: string, direction: 'up' | 'down') => {
-    setState(prev => {
-      const targetPonto = prev.pontos.find(p => p.id === id);
-      if (!targetPonto) return prev;
-
-      // Find all points of the same materia and cronograma, sorted by logical ordem
-      const subjectPoints = prev.pontos
-        .filter(p => p.materia === targetPonto.materia && p.cronogramaId === targetPonto.cronogramaId)
-        .sort((a, b) => {
-          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
-          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
-          if (oA !== oB) return oA - oB;
-          return (a.createdAt || 0) - (b.createdAt || 0);
-        });
-
-      const position = subjectPoints.findIndex(p => p.id === id);
-      if (position === -1) return prev;
-
-      let swapWithPos = -1;
-      if (direction === 'up' && position > 0) {
-        swapWithPos = position - 1;
-      } else if (direction === 'down' && position < subjectPoints.length - 1) {
-        swapWithPos = position + 1;
-      }
-
-      if (swapWithPos === -1) return prev;
-
-      // Swap their positions
-      const reordered = [...subjectPoints];
-      const temp = reordered[position];
-      reordered[position] = reordered[swapWithPos];
-      reordered[swapWithPos] = temp;
-
-      // Reassign clean sequence ordems: 1, 2, 3...
-      const ordemMap = new Map<string, number>();
-      reordered.forEach((p, index) => {
-        ordemMap.set(p.id, index + 1);
-      });
-
-      const nextPontos = prev.pontos.map(p => {
-        if (ordemMap.has(p.id)) {
-          return {
-            ...p,
-            ordem: ordemMap.get(p.id)!,
-            updatedAt: Date.now()
-          };
-        }
-        return p;
-      });
-
-      return {
-        ...prev,
-        pontos: nextPontos
-      };
-    });
-  }, []);
-
-  const handleReorderPontos = useCallback((materia: string, cronogramaId: string | undefined, orderedIds: string[]) => {
-    setState(prev => {
-      const ordemMap = new Map<string, number>();
-      orderedIds.forEach((id, index) => {
-        ordemMap.set(id, index + 1);
-      });
-
-      const nextPontos = prev.pontos.map(p => {
-        if (p.materia === materia && (cronogramaId === undefined || p.cronogramaId === cronogramaId) && ordemMap.has(p.id)) {
-          return {
-            ...p,
-            ordem: ordemMap.get(p.id)!,
-            updatedAt: Date.now()
-          };
-        }
-        return p;
-      });
-
-      return {
-        ...prev,
-        pontos: nextPontos
-      };
-    });
-  }, []);
-
-  const handleSavePonto = useCallback((data: {
-    id?: string;
-    cronogramaId?: string;
-    titulo: string;
-    materia: string;
-    tipoEstudo: TipoEstudo;
-    artigosLei?: string;
-    jurisprudenciaRef?: string;
-    novaMateriaCor?: string;
-    data: string;
-    notas: string;
-  }) => {
-    setState(prev => {
-      const updatedColors = { ...prev.materiasCores };
-      if (data.novaMateriaCor) {
-        updatedColors[data.materia] = data.novaMateriaCor;
-      }
-
-      const assignedCronogramaId = data.cronogramaId || 
-        (prev.activeCronogramaId !== 'all' ? prev.activeCronogramaId : (prev.cronogramas[0]?.id || 'cronograma-geral'));
-
-      if (data.id) {
-        // Edit existing
-        const nextPontos = prev.pontos.map(p => {
-          if (p.id === data.id) {
-            return {
-              ...p,
-              cronogramaId: assignedCronogramaId,
-              titulo: data.titulo,
-              materia: data.materia,
-              tipoEstudo: data.tipoEstudo,
-              artigosLei: data.artigosLei,
-              jurisprudenciaRef: data.jurisprudenciaRef,
-              data: data.data,
-              notas: data.notas,
-              updatedAt: Date.now()
-            };
-          }
-          return p;
-        });
-        return { ...prev, pontos: nextPontos, materiasCores: updatedColors };
-      } else {
-        // Add new, calculating next sequential logical ordem in this subject
-        const targetCronId = assignedCronogramaId;
-        const subjectPoints = prev.pontos.filter(p => p.materia === data.materia && p.cronogramaId === targetCronId);
-        const maxOrdem = subjectPoints.reduce((max, p) => Math.max(max, typeof p.ordem === 'number' ? p.ordem : 0), 0);
-
-        const newPonto: PontoEstudo = {
-          id: uid(),
-          cronogramaId: targetCronId,
-          titulo: data.titulo,
-          materia: data.materia,
-          tipoEstudo: data.tipoEstudo,
-          artigosLei: data.artigosLei,
-          jurisprudenciaRef: data.jurisprudenciaRef,
-          data: data.data,
-          notas: data.notas,
-          lido: false,
-          qFeitas: false,
-          qTotal: '',
-          qAcertos: '',
-          dif: null,
-          showNotes: Boolean(data.notas),
-          ordem: maxOrdem + 1,
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        };
-        return {
-          ...prev,
-          pontos: [...prev.pontos, newPonto],
-          materiasCores: updatedColors
-        };
-      }
-    });
-  }, []);
-
-  const handleDuplicatePonto = useCallback((ponto: PontoEstudo) => {
-    setState(prev => {
-      const subjectPoints = prev.pontos.filter(p => p.materia === ponto.materia && p.cronogramaId === ponto.cronogramaId);
-      const maxOrdem = subjectPoints.reduce((max, p) => Math.max(max, typeof p.ordem === 'number' ? p.ordem : 0), 0);
-
-      const duplicated: PontoEstudo = {
-        ...ponto,
-        id: uid(),
-        titulo: `${ponto.titulo} (Revisão)`,
-        data: ponto.data ? addDays(ponto.data, 7) : ponto.data,
-        lido: false,
-        qFeitas: false,
-        qTotal: '',
-        qAcertos: '',
-        dif: 'medio',
-        ordem: maxOrdem + 1,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      return {
-        ...prev,
-        pontos: [...prev.pontos, duplicated]
-      };
-    });
-  }, []);
-
-  const handleConfirmSplit = useCallback((pontoId: string, parts: Array<{ titulo: string; data: string }>, efeitoCascata: boolean) => {
-    setState(prev => {
-      const original = prev.pontos.find(p => p.id === pontoId);
-      if (!original) return prev;
-
-      const datesSelected = parts.map(p => p.data);
-      const extraSessionsCount = datesSelected.length - 1;
-      const firstSelectedDate = datesSelected[0];
-
-      // Shift subsequent points of the same subject if cascade is enabled
-      const daysToShift = extraSessionsCount * 7;
-
-      const nextPontos = prev.pontos.map(p => {
-        if (p.id === pontoId) {
-          return {
-            ...p,
-            data: datesSelected[0], // primary date
-            datas: datesSelected, // all selected dates
-            updatedAt: Date.now()
-          };
-        }
-
-        // Apply shift to other scheduled points of the same subject
-        if (
-          efeitoCascata &&
-          daysToShift > 0 &&
-          p.materia === original.materia &&
-          p.cronogramaId === original.cronogramaId &&
-          p.data &&
-          p.data > firstSelectedDate
-        ) {
-          // Helper to add days to YYYY-MM-DD
-          const shiftDateStr = (dStr: string, days: number) => {
-            const [y, m, d] = dStr.split('-').map(Number);
-            const dateObj = new Date(y, m - 1, d);
-            dateObj.setDate(dateObj.getDate() + days);
-            const rY = dateObj.getFullYear();
-            const rM = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const rD = String(dateObj.getDate()).padStart(2, '0');
-            return `${rY}-${rM}-${rD}`;
-          };
-
-          const newData = shiftDateStr(p.data, daysToShift);
-          const newDatas = p.datas && p.datas.length > 0 
-            ? p.datas.map(dStr => shiftDateStr(dStr, daysToShift))
-            : undefined;
-
-          return {
-            ...p,
-            data: newData,
-            datas: newDatas,
-            updatedAt: Date.now()
-          };
-        }
-
-        return p;
-      });
-
-      return {
-        ...prev,
-        pontos: nextPontos
-      };
-    });
-  }, []);
-
-  const handleMovePontoDate = useCallback((pontoId: string, newDate: string) => {
-    handleUpdatePonto(pontoId, { data: newDate });
-  }, [handleUpdatePonto]);
+  const {
+    handleUpdatePonto,
+    handleDeletePonto,
+    handleMovePonto,
+    handleReorderPontos,
+    handleSavePonto,
+    handleDuplicatePonto,
+    handleConfirmSplit,
+    handleMovePontoDate,
+    handleApplyReorganize
+  } = usePontos(setState);
 
   // Edital Operations
-  const handleUpdateEdital = useCallback((id: string, updated: Partial<Edital>) => {
-    setState(prev => ({
-      ...prev,
-      editais: prev.editais.map(e => e.id === id ? { ...e, ...updated } : e)
-    }));
-  }, []);
-
-  const handleDeleteEdital = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      editais: prev.editais.filter(e => e.id !== id),
-      cronogramas: prev.cronogramas.map(c => c.editalId === id ? { ...c, editalId: undefined } : c)
-    }));
-  }, []);
-
-  const handleSaveEdital = useCallback((editalData: {
-    id?: string;
-    nome: string;
-    cargo: string;
-    banca: string;
-    dataProva: string;
-    status: EditalStatus;
-    conteudo: string;
-  }) => {
-    setState(prev => {
-      if (editalData.id) {
-        const nextEditais = prev.editais.map(e => {
-          if (e.id === editalData.id) {
-            return {
-              ...e,
-              nome: editalData.nome,
-              cargo: editalData.cargo,
-              banca: editalData.banca,
-              dataProva: editalData.dataProva,
-              status: editalData.status,
-              conteudo: editalData.conteudo
-            };
-          }
-          return e;
-        });
-        return { ...prev, editais: nextEditais };
-      } else {
-        const newEdital: Edital = {
-          id: uid(),
-          nome: editalData.nome,
-          cargo: editalData.cargo,
-          banca: editalData.banca,
-          dataProva: editalData.dataProva,
-          status: editalData.status,
-          conteudo: editalData.conteudo
-        };
-        return {
-          ...prev,
-          editais: [...prev.editais, newEdital]
-        };
-      }
-    });
-  }, []);
+  const {
+    handleUpdateEdital,
+    handleDeleteEdital,
+    handleSaveEdital,
+    handleConfirmSmartImport,
+    handleImportEditalFromMd
+  } = useEditais(setState);
 
   const handleLaunchSmartStructurer = useCallback((hierarchy: SmartEditalHierarchy) => {
     setSmartImportHierarchy(hierarchy);
@@ -848,314 +281,16 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     setIsEditalModalOpen(false);
   }, []);
 
-  const handleConfirmSmartImport = useCallback((payload: {
-    edital: {
-      nome: string;
-      cargo: string;
-      banca: string;
-      dataProva: string;
-      status: EditalStatus;
-      conteudo: string;
-    };
-    cronograma: {
-      nome: string;
-      descricao: string;
-      dataProva: string;
-      cor: string;
-    };
-    studyPlan: Array<{
-      materia: string;
-      titulo: string;
-      tipoEstudo: TipoEstudo;
-      artigosLei?: string;
-      jurisprudenciaRef?: string;
-      notas?: string;
-      data: string;
-    }>;
-  }) => {
-    const newEditalId = uid();
-    const newCroId = uid();
-
-    const newEdital: Edital = {
-      id: newEditalId,
-      nome: payload.edital.nome,
-      cargo: payload.edital.cargo,
-      banca: payload.edital.banca,
-      dataProva: payload.edital.dataProva,
-      status: payload.edital.status,
-      conteudo: payload.edital.conteudo,
-      createdAt: Date.now()
-    };
-
-    const newCronograma: Cronograma = {
-      id: newCroId,
-      nome: payload.cronograma.nome,
-      descricao: payload.cronograma.descricao,
-      editalId: newEditalId,
-      dataProva: payload.cronograma.dataProva,
-      cor: payload.cronograma.cor || '#8C1C2C',
-      createdAt: Date.now()
-    };
-
-    // Group by materia to assign sequential logical sequence (ordem: 1, 2, 3...)
-    const subjectOrderCounts: Record<string, number> = {};
-    const newPontos: PontoEstudo[] = payload.studyPlan.map((p, idx) => {
-      subjectOrderCounts[p.materia] = (subjectOrderCounts[p.materia] || 0) + 1;
-      return {
-        id: uid() + idx + Math.random().toString(36).slice(2, 6),
-        cronogramaId: newCroId,
-        data: p.data,
-        materia: p.materia,
-        titulo: p.titulo,
-        tipoEstudo: p.tipoEstudo,
-        artigosLei: p.artigosLei || '',
-        jurisprudenciaRef: p.jurisprudenciaRef || '',
-        notas: p.notas || '',
-        lido: false,
-        qFeitas: false,
-        qTotal: '',
-        qAcertos: '',
-        dif: null,
-        showNotes: Boolean(p.notas),
-        ordem: subjectOrderCounts[p.materia],
-        createdAt: Date.now() + idx,
-        updatedAt: Date.now() + idx
-      };
-    });
-
-    setState(prev => {
-      const nextColors = { ...prev.materiasCores };
-      newPontos.forEach(p => {
-        if (!nextColors[p.materia]) {
-          nextColors[p.materia] = '#8C1C2C';
-        }
-      });
-
-      return {
-        ...prev,
-        editais: [newEdital, ...prev.editais],
-        cronogramas: [...prev.cronogramas, newCronograma],
-        pontos: [...prev.pontos, ...newPontos],
-        materiasCores: nextColors,
-        activeCronogramaId: newCroId,
-        ui: {
-          ...prev.ui,
-          activeTab: 'cronograma'
-        }
-      };
-    });
-
-    confetti({
-      particleCount: 70,
-      spread: 60,
-      origin: { y: 0.6 }
-    });
-  }, []);
-
-  const handleImportEditalFromMd = useCallback((parsed: ReturnType<typeof parseEditalMarkdown>) => {
-    const newEditalId = uid();
-    const newEdital: Edital = {
-      id: newEditalId,
-      nome: parsed.nome,
-      cargo: parsed.cargo,
-      banca: parsed.banca,
-      dataProva: parsed.dataProva,
-      status: parsed.status,
-      conteudo: parsed.conteudo,
-      createdAt: Date.now()
-    };
-
-    // Check if there are markdown study points in the content
-    const parsedPoints = parseMarkdownStudyPoints(parsed.conteudo);
-    const newCroId = uid();
-    const newCronograma: Cronograma = {
-      id: newCroId,
-      nome: `${parsed.nome}${parsed.cargo ? ` (${parsed.cargo})` : ''}`,
-      descricao: `Cronograma gerado a partir do edital ${parsed.nome}`,
-      editalId: newEditalId,
-      dataProva: parsed.dataProva,
-      cor: '#8C1C2C',
-      createdAt: Date.now()
-    };
-
-    let newPontoItems: PontoEstudo[] = [];
-    if (parsedPoints.length > 0) {
-      const dates = distributePlannedDates(parsedPoints.length, {
-        startDate: hojeStr(),
-        topicsPerDay: 2,
-        studyDaysMode: 'seg-sab'
-      });
-
-      const subjectOrderCounts: Record<string, number> = {};
-      newPontoItems = parsedPoints.map((p, idx) => {
-        const mat = p.materia || 'Geral';
-        subjectOrderCounts[mat] = (subjectOrderCounts[mat] || 0) + 1;
-        return {
-          id: uid() + idx,
-          cronogramaId: newCroId,
-          data: p.data || dates[idx] || hojeStr(),
-          materia: mat,
-          titulo: p.titulo,
-          tipoEstudo: p.tipoEstudo || 'doutrina',
-          artigosLei: p.artigosLei || '',
-          jurisprudenciaRef: p.jurisprudenciaRef || '',
-          notas: p.notas || '',
-          lido: false,
-          qFeitas: false,
-          qTotal: '',
-          qAcertos: '',
-          dif: null,
-          showNotes: Boolean(p.notas),
-          ordem: subjectOrderCounts[mat],
-          createdAt: Date.now() + idx,
-          updatedAt: Date.now() + idx
-        };
-      });
-    }
-
-    setState(prev => {
-      // Collect new subject colors if any
-      const nextMateriasCores = { ...prev.materiasCores };
-      newPontoItems.forEach(p => {
-        if (!nextMateriasCores[p.materia]) {
-          nextMateriasCores[p.materia] = '#52525b';
-        }
-      });
-
-      return {
-        ...prev,
-        editais: [newEdital, ...prev.editais],
-        cronogramas: [...prev.cronogramas, newCronograma],
-        pontos: [...prev.pontos, ...newPontoItems],
-        materiasCores: nextMateriasCores,
-        activeCronogramaId: newCroId
-      };
-    });
-  }, []);
-
   // Cronograma Operations
-  const handleSelectCronograma = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      activeCronogramaId: id
-    }));
-  }, []);
-
-  const handleSaveCronograma = useCallback((data: {
-    id?: string;
-    nome: string;
-    descricao?: string;
-    editalId?: string;
-    dataProva?: string;
-    cor?: string;
-  }) => {
-    setState(prev => {
-      if (data.id) {
-        const nextList = prev.cronogramas.map(c => {
-          if (c.id === data.id) {
-            return {
-              ...c,
-              nome: data.nome,
-              descricao: data.descricao,
-              editalId: data.editalId,
-              dataProva: data.dataProva,
-              cor: data.cor
-            };
-          }
-          return c;
-        });
-        return { ...prev, cronogramas: nextList };
-      } else {
-        const newId = `cronograma-${uid()}`;
-        const newCro: Cronograma = {
-          id: newId,
-          nome: data.nome,
-          descricao: data.descricao,
-          editalId: data.editalId,
-          dataProva: data.dataProva,
-          cor: data.cor || '#8C1C2C',
-          createdAt: Date.now()
-        };
-        return {
-          ...prev,
-          cronogramas: [...prev.cronogramas, newCro],
-          activeCronogramaId: newId
-        };
-      }
-    });
-  }, []);
-
-  const handleSaveExamDate = useCallback((newDate: string, editalIdToUpdate?: string) => {
-    setState(prev => {
-      // 1. Update active cronograma date
-      let nextCronogramas = prev.cronogramas;
-      if (prev.activeCronogramaId !== 'all') {
-        nextCronogramas = prev.cronogramas.map(c => {
-          if (c.id === prev.activeCronogramaId) {
-            return { ...c, dataProva: newDate, editalId: editalIdToUpdate || c.editalId };
-          }
-          return c;
-        });
-      }
-
-      // 2. Update target edital date if provided
-      let nextEditais = prev.editais;
-      if (editalIdToUpdate) {
-        nextEditais = prev.editais.map(e => {
-          if (e.id === editalIdToUpdate) {
-            return { ...e, dataProva: newDate };
-          }
-          return e;
-        });
-      }
-
-      return {
-        ...prev,
-        cronogramas: nextCronogramas,
-        editais: nextEditais
-      };
-    });
-  }, []);
-
-  const handleDeleteCronograma = useCallback((id: string) => {
-    setState(prev => {
-      const nextCro = prev.cronogramas.filter(c => c.id !== id);
-      const nextPontos = prev.pontos.filter(p => p.cronogramaId !== id);
-      const nextActiveId = prev.activeCronogramaId === id ? (nextCro[0]?.id || 'all') : prev.activeCronogramaId;
-      return {
-        ...prev,
-        cronogramas: nextCro,
-        pontos: nextPontos,
-        activeCronogramaId: nextActiveId
-      };
-    });
-  }, []);
-
-  const handleSwitchToCronograma = useCallback((cronogramaId: string) => {
-    setState(prev => ({
-      ...prev,
-      activeCronogramaId: cronogramaId,
-      ui: { ...prev.ui, activeTab: 'pontos' }
-    }));
-  }, []);
-
-  const handleCriarCronogramaParaEdital = useCallback((edital: Edital) => {
-    const newId = `cronograma-${uid()}`;
-    const newCro: Cronograma = {
-      id: newId,
-      nome: `${edital.nome} (${edital.cargo})`,
-      descricao: `Cronograma personalizado para o concurso ${edital.nome}`,
-      editalId: edital.id,
-      cor: '#14524A',
-      createdAt: Date.now()
-    };
-    setState(prev => ({
-      ...prev,
-      cronogramas: [...prev.cronogramas, newCro],
-      activeCronogramaId: newId,
-      ui: { ...prev.ui, activeTab: 'pontos' }
-    }));
-  }, []);
+  const {
+    handleSelectCronograma,
+    handleSaveCronograma,
+    handleSaveExamDate,
+    handleDeleteCronograma,
+    handleSwitchToCronograma,
+    handleCriarCronogramaParaEdital,
+    handleImportPointsToSchedule
+  } = useCronogramas(setState);
 
   const handleOpenImportForEdital = useCallback((edital: Edital) => {
     setImportTargetEdital(edital);
@@ -1203,209 +338,13 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     }
   }, [state.activeCronogramaId, activeCronogramaObj, filteredPontos]);
 
-  // Reorganize Application
-  const handleApplyReorganize = useCallback((reorgData: Record<string, string> | PontoEstudo[]) => {
-    setState(prev => {
-      const activeId = prev.activeCronogramaId;
-      let nextPontos: PontoEstudo[];
-
-      if (Array.isArray(reorgData)) {
-        const reorgMap = new Map(reorgData.map(p => [p.id, p]));
-
-        // Points belonging to other schedules
-        const otherPoints = prev.pontos.filter(p => !(activeId === 'all' || p.cronogramaId === activeId));
-
-        // Existing points of active schedule
-        const currentActivePoints = activeId === 'all' 
-          ? prev.pontos 
-          : prev.pontos.filter(p => p.cronogramaId === activeId);
-
-        // Update existing points, ensuring NONE are ever lost
-        const updatedActivePoints = currentActivePoints.map(p => {
-          if (reorgMap.has(p.id)) {
-            return reorgMap.get(p.id)!;
-          }
-          // If point was omitted from reorgData (e.g. was already completed), keep it!
-          // Clear its calendar date if it's completed so it is taken off the calendar,
-          // but preserve the topic in state so it remains available in the materias tab.
-          const isDone = Boolean(p.lido || (p.qFeitas && Number(p.qTotal) > 0));
-          return {
-            ...p,
-            data: isDone ? '' : p.data,
-            updatedAt: Date.now()
-          };
-        });
-
-        // Any brand new points in reorgData that were not originally in currentActivePoints
-        const existingIds = new Set(currentActivePoints.map(p => p.id));
-        const brandNewPoints = reorgData.filter(p => !existingIds.has(p.id));
-
-        const allActive = [...updatedActivePoints, ...brandNewPoints];
-        // Sort active points strictly by logical ordem within each subject
-        allActive.sort((a, b) => {
-          if (a.materia !== b.materia) return a.materia.localeCompare(b.materia);
-          const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
-          const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
-          if (oA !== oB) return oA - oB;
-          return (a.createdAt || 0) - (b.createdAt || 0);
-        });
-
-        nextPontos = [...otherPoints, ...allActive];
-      } else if (reorgData && typeof reorgData === 'object') {
-        nextPontos = prev.pontos.map(p => {
-          if ((activeId === 'all' || p.cronogramaId === activeId) && reorgData[p.id] !== undefined) {
-            return {
-              ...p,
-              data: reorgData[p.id],
-              updatedAt: Date.now()
-            };
-          }
-          return p;
-        });
-      } else {
-        nextPontos = prev.pontos;
-      }
-
-      return {
-        ...prev,
-        pontos: nextPontos
-      };
-    });
-  }, []);
-
   // Subject Manager Operations
-  const handleUpdateSubjectColor = useCallback((materia: string, novaCor: string) => {
-    setState(prev => ({
-      ...prev,
-      materiasCores: {
-        ...prev.materiasCores,
-        [materia]: novaCor
-      }
-    }));
-  }, []);
-
-  const handleAddSubject = useCallback((materia: string, cor: string) => {
-    setState(prev => ({
-      ...prev,
-      materiasCores: {
-        ...prev.materiasCores,
-        [materia]: cor
-      }
-    }));
-  }, []);
-
-  const handleDeleteSubject = useCallback((materia: string) => {
-    setState(prev => {
-      const nextColors = { ...prev.materiasCores };
-      delete nextColors[materia];
-
-      return {
-        ...prev,
-        pontos: prev.pontos.filter(p => p.materia !== materia),
-        materiasCores: nextColors
-      };
-    });
-  }, []);
-
-  const handleRenameSubject = useCallback((antigoNome: string, novoNome: string) => {
-    setState(prev => {
-      const nextColors = { ...prev.materiasCores };
-      if (nextColors[antigoNome] !== undefined) {
-        nextColors[novoNome] = nextColors[antigoNome];
-        delete nextColors[antigoNome];
-      }
-
-      const nextPoints = prev.pontos.map(p => {
-        if (p.materia === antigoNome) {
-          return {
-            ...p,
-            materia: novoNome,
-            updatedAt: Date.now()
-          };
-        }
-        return p;
-      });
-
-      return {
-        ...prev,
-        pontos: nextPoints,
-        materiasCores: nextColors
-      };
-    });
-  }, []);
-
-  // Import points to specific schedule
-  const handleImportPointsToSchedule = useCallback((
-    points: PontoEstudo[],
-    destination: {
-      type: 'new_cronograma' | 'append_current' | 'replace_current';
-      newCronogramaNome?: string;
-      newCronogramaEditalId?: string;
-      targetCronogramaId?: string;
-    }
-  ) => {
-    setState(prev => {
-      let targetCronId = destination.targetCronogramaId || prev.activeCronogramaId;
-      const nextCronogramas = [...prev.cronogramas];
-
-      if (destination.type === 'new_cronograma') {
-        const newId = destination.targetCronogramaId || `cronograma-${uid()}`;
-        targetCronId = newId;
-        const newCro: Cronograma = {
-          id: newId,
-          nome: destination.newCronogramaNome || 'Novo Cronograma',
-          editalId: destination.newCronogramaEditalId || undefined,
-          cor: '#3b82f6',
-          createdAt: Date.now()
-        };
-        nextCronogramas.push(newCro);
-      }
-
-      const newPoints: PontoEstudo[] = points.map((item, idx) => ({
-        id: item.id || (uid() + idx),
-        cronogramaId: targetCronId,
-        data: item.data || '',
-        materia: item.materia || 'Geral',
-        titulo: item.titulo || 'Tópico de Estudo',
-        tipoEstudo: item.tipoEstudo || 'doutrina',
-        artigosLei: item.artigosLei || '',
-        jurisprudenciaRef: item.jurisprudenciaRef || '',
-        notas: item.notas || '',
-        lido: item.lido || false,
-        qFeitas: item.qFeitas || false,
-        qTotal: item.qTotal || '',
-        qAcertos: item.qAcertos || '',
-        dif: item.dif || null,
-        showNotes: Boolean(item.notas),
-        createdAt: item.createdAt || Date.now(),
-        updatedAt: item.updatedAt || Date.now()
-      }));
-
-      let nextPontos = [...prev.pontos];
-      if (destination.type === 'replace_current') {
-        // Remove existing points of this schedule
-        nextPontos = nextPontos.filter(p => p.cronogramaId !== targetCronId);
-      }
-      nextPontos.push(...newPoints);
-
-      // Collect new subject colors if any
-      const nextColors = { ...prev.materiasCores };
-      newPoints.forEach(p => {
-        if (!nextColors[p.materia]) {
-          nextColors[p.materia] = '#52525b';
-        }
-      });
-
-      return {
-        ...prev,
-        cronogramas: nextCronogramas,
-        pontos: nextPontos,
-        materiasCores: nextColors,
-        activeCronogramaId: targetCronId,
-        ui: { ...prev.ui, activeTab: 'pontos' }
-      };
-    });
-  }, []);
+  const {
+    handleUpdateSubjectColor,
+    handleAddSubject,
+    handleDeleteSubject,
+    handleRenameSubject
+  } = useMaterias(setState);
 
   return (
     <div className="min-h-screen bg-[#f7f7f5] text-zinc-900 flex font-sans selection:bg-zinc-900 selection:text-white">
@@ -1624,10 +563,10 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
               onDeleteSessao={handleDeleteSessao}
               onUpdateSessao={handleUpdateSessao}
               activeTimer={activeTimer}
-              onStartTimer={(cfg) => setActiveTimer({ ...cfg, isRunning: true, secondsElapsed: 0 })}
-              onPauseTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: false }))}
-              onResumeTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: true }))}
-              onResetTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: false, secondsElapsed: 0 }))}
+              onStartTimer={startTimer}
+              onPauseTimer={pauseTimer}
+              onResumeTimer={resumeTimer}
+              onResetTimer={resetTimer}
             />
           )}
 
@@ -1815,10 +754,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
       <FocusDurationModal
         isOpen={isFocusDurationModalOpen}
-        onClose={() => {
-          setIsFocusDurationModalOpen(false);
-          setFocusTargetPonto(null);
-        }}
+        onClose={handleCloseFocusDuration}
         ponto={focusTargetPonto}
         materiaCor={focusTargetPonto ? (state.materiasCores[focusTargetPonto.materia] || '#d97706') : '#d97706'}
         onConfirm={handleConfirmStartFocus}

@@ -104,7 +104,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   };
 
   // Calculate days to exam
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeStr();
   const getExamDateInfo = () => {
     if (activeCronogramaObj?.dataProva) {
       return { dateStr: activeCronogramaObj.dataProva, source: activeCronogramaObj.nome };
