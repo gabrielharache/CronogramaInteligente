@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { hojeStr, formatarDataBr } from '../utils/helpers';
+import { ActiveTimerState } from '../hooks/useFocusTimer';
 
 interface FocusTimerViewProps {
   sessoesEstudo?: SessaoEstudo[];
@@ -35,19 +36,7 @@ interface FocusTimerViewProps {
   materiasCores?: Record<string, string>;
   pontos?: PontoEstudo[];
   // External timer state if running in background
-  activeTimer?: {
-    isRunning: boolean;
-    mode: 'cronometro' | 'pomodoro' | 'pausa';
-    secondsElapsed: number;
-    targetSeconds: number;
-    materia: string;
-    assunto: string;
-    pontoId?: string;
-    cronogramaId?: string;
-    marcarComoLido: boolean;
-    notas: string;
-    tipoEstudo?: TipoEstudo;
-  };
+  activeTimer?: ActiveTimerState;
   onStartTimer?: (config: {
     mode: 'cronometro' | 'pomodoro' | 'pausa';
     targetSeconds: number;

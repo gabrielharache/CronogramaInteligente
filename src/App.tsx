@@ -1,19 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { AppState, PontoEstudo, Edital, EditalStatus, TabMode, ViewMode, TipoEstudo, Cronograma, BlocoHorario, SessaoEstudo } from './types';
-import { 
-  loadLocalUserState, 
-  fetchUserState, 
-  saveUserState, 
-  saveLocalUserState, 
-  saveCloudUserState, 
-  exportBackup, 
-  getInitialState, 
-  getEmptyUserState 
-} from './utils/storage';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { AppState, PontoEstudo, Edital, EditalStatus, TabMode, ViewMode, TipoEstudo, Cronograma, BlocoHorario } from './types';
+import { loadLocalUserState, exportBackup } from './utils/storage';
 import { uid, hojeStr, addDays, parseEditalMarkdown, parseMarkdownStudyPoints, distributePlannedDates, SmartEditalHierarchy, calcularDificuldadeAutomatica } from './utils/helpers';
 import confetti from 'canvas-confetti';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AuthPage } from './components/auth/AuthPage';
+import { useFocusTimer } from './hooks/useFocusTimer';
+import { useCloudSync } from './hooks/useCloudSync';
 
 // Components
 import { Header } from './components/Header';
@@ -88,10 +81,6 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
   const [splittingPonto, setSplittingPonto] = useState<PontoEstudo | null>(null);
 
-  // Focus configuration states
-  const [focusTargetPonto, setFocusTargetPonto] = useState<PontoEstudo | null>(null);
-  const [isFocusDurationModalOpen, setIsFocusDurationModalOpen] = useState(false);
-
   const [isReorganizeModalOpen, setIsReorganizeModalOpen] = useState(false);
   const [isSubjectManagerOpen, setIsSubjectManagerOpen] = useState(false);
   const [importTargetEdital, setImportTargetEdital] = useState<Edital | null>(null);
@@ -108,268 +97,31 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
     }));
   }, []);
 
-  // Active Focus Timer state managed at App level so it continues running across tabs
-  const [activeTimer, setActiveTimer] = useState<{
-    isRunning: boolean;
-    mode: 'cronometro' | 'pomodoro' | 'pausa';
-    secondsElapsed: number;
-    targetSeconds: number;
-    materia: string;
-    assunto: string;
-    pontoId?: string;
-    cronogramaId?: string;
-    marcarComoLido: boolean;
-    notas: string;
-    tipoEstudo?: TipoEstudo;
-  }>({
-    isRunning: false,
-    mode: 'pomodoro',
-    secondsElapsed: 0,
-    targetSeconds: 50 * 60,
-    materia: '',
-    assunto: '',
-    marcarComoLido: true,
-    notas: ''
-  });
+  const {
+    activeTimer,
+    startTimer,
+    pauseTimer,
+    resumeTimer,
+    resetTimer,
+    focusTargetPonto,
+    isFocusDurationModalOpen,
+    handleStartFocus,
+    handleCloseFocusDuration,
+    handleConfirmStartFocus,
+    handleSaveSessao,
+    handleUpdateSessao,
+    handleDeleteSessao
+  } = useFocusTimer(setState);
 
-  useEffect(() => {
-    if (!activeTimer.isRunning) return;
-    // Advance by wall-clock time so background-tab throttling or sleep doesn't make the timer drift
-    let lastTick = Date.now();
-    const interval = setInterval(() => {
-      const delta = Math.floor((Date.now() - lastTick) / 1000);
-      if (delta <= 0) return;
-      lastTick += delta * 1000;
-      setActiveTimer(prev => {
-        if (!prev.isRunning) return prev;
-        return { ...prev, secondsElapsed: prev.secondsElapsed + delta };
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [activeTimer.isRunning]);
-
-  const handleStartFocus = useCallback((ponto: PontoEstudo) => {
-    setFocusTargetPonto(ponto);
-    setIsFocusDurationModalOpen(true);
-  }, []);
-
-  const handleConfirmStartFocus = useCallback((minutes: number, mode: 'pomodoro' | 'cronometro') => {
-    if (!focusTargetPonto) return;
-    setActiveTimer({
-      isRunning: true,
-      mode: mode,
-      secondsElapsed: 0,
-      targetSeconds: minutes * 60,
-      materia: focusTargetPonto.materia,
-      assunto: focusTargetPonto.titulo,
-      pontoId: focusTargetPonto.id,
-      cronogramaId: focusTargetPonto.cronogramaId,
-      marcarComoLido: true,
-      notas: focusTargetPonto.notas || '',
-      tipoEstudo: focusTargetPonto.tipoEstudo
-    });
-    setIsFocusDurationModalOpen(false);
-    setFocusTargetPonto(null);
-    setState(prev => ({
-      ...prev,
-      ui: { ...prev.ui, activeTab: 'foco' }
-    }));
-  }, [focusTargetPonto]);
-
-  const handleDeleteSessao = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      sessoesEstudo: (prev.sessoesEstudo || []).filter(s => s.id !== id)
-    }));
-  }, []);
-
-  const handleUpdateSessao = useCallback((id: string, updated: Partial<SessaoEstudo>) => {
-    setState(prev => ({
-      ...prev,
-      sessoesEstudo: (prev.sessoesEstudo || []).map(s => s.id === id ? { ...s, ...updated } : s)
-    }));
-  }, []);
-
-  const handleSaveSessao = useCallback((novaSessaoData: Omit<SessaoEstudo, 'id'>, marcarPontoLidoId?: string) => {
-    setState(prev => {
-      let cronogramaId = novaSessaoData.cronogramaId;
-      if (!cronogramaId && novaSessaoData.pontoId) {
-        const associatedPoint = prev.pontos.find(p => p.id === novaSessaoData.pontoId);
-        if (associatedPoint) {
-          cronogramaId = associatedPoint.cronogramaId;
-        }
-      }
-      if (!cronogramaId && prev.activeCronogramaId && prev.activeCronogramaId !== 'all') {
-        cronogramaId = prev.activeCronogramaId;
-      }
-      if (!cronogramaId && prev.cronogramas.length > 0) {
-        const matchingPoint = prev.pontos.find(p => p.materia === novaSessaoData.materia);
-        if (matchingPoint && matchingPoint.cronogramaId) {
-          cronogramaId = matchingPoint.cronogramaId;
-        } else {
-          cronogramaId = prev.cronogramas[0].id;
-        }
-      }
-
-      const novaSessao: SessaoEstudo = {
-        ...novaSessaoData,
-        cronogramaId,
-        id: uid()
-      };
-
-      let nextPontos = prev.pontos;
-      if (marcarPontoLidoId) {
-        nextPontos = prev.pontos.map(p => p.id === marcarPontoLidoId ? { ...p, lido: true } : p);
-      }
-      return {
-        ...prev,
-        pontos: nextPontos,
-        sessoesEstudo: [novaSessao, ...(prev.sessoesEstudo || [])]
-      };
-    });
-  }, []);
-
-  // State persistence: Auto-save at 30s, manual save, and revert capabilities
-  const [lastSavedState, setLastSavedState] = useState<AppState>(() => loadLocalUserState(userId));
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [autoSaveCountdown, setAutoSaveCountdown] = useState<number | null>(null);
-
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const lastSavedStateRef = useRef(lastSavedState);
-  lastSavedStateRef.current = lastSavedState;
-  const isSavingRef = useRef(isSaving);
-  isSavingRef.current = isSaving;
-
-  // Determine if there are pending unsaved changes compared to the cloud version
-  const hasUnsavedChanges = useMemo(() => {
-    return JSON.stringify(state) !== JSON.stringify(lastSavedState);
-  }, [state, lastSavedState]);
-
-  // Sync state with cloud when user logs in or mounts
-  useEffect(() => {
-    let isMounted = true;
-    if (userId) {
-      fetchUserState(userId).then(({ state: cloudState, updatedAt }) => {
-        if (isMounted && cloudState) {
-          setState(cloudState);
-          setLastSavedState(cloudState);
-          if (updatedAt) {
-            setLastSavedAt(new Date(updatedAt));
-          } else {
-            setLastSavedAt(new Date());
-          }
-        }
-      }).catch(err => {
-        console.error('Error fetching cloud state:', err);
-      });
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [userId]);
-
-  // Always update local storage draft immediately so browser refresh/crash never loses data
-  useEffect(() => {
-    saveLocalUserState(state, userId);
-  }, [state, userId]);
-
-  // Core save routine to Supabase
-  const executeCloudSave = useCallback(async (stateToSave: AppState) => {
-    if (isSavingRef.current) return;
-    setIsSaving(true);
-    try {
-      const res = await saveCloudUserState(stateToSave, userId);
-      if (res.success) {
-        setLastSavedState(stateToSave);
-        setLastSavedAt(res.updatedAt ? new Date(res.updatedAt) : new Date());
-        setAutoSaveCountdown(null);
-      }
-    } catch (err) {
-      console.error('Error saving state to Supabase:', err);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [userId]);
-
-  // Manual save trigger (Header button or Ctrl+S)
-  const handleManualSave = useCallback(() => {
-    if (!hasUnsavedChanges || isSavingRef.current) return;
-    executeCloudSave(stateRef.current);
-  }, [hasUnsavedChanges, executeCloudSave]);
-
-  // Revert/discard changes to last saved cloud state
-  const handleDiscardChanges = useCallback(() => {
-    if (!hasUnsavedChanges) return;
-    const restored = lastSavedStateRef.current;
-    setState(restored);
-    saveLocalUserState(restored, userId);
-    setAutoSaveCountdown(null);
-  }, [hasUnsavedChanges, userId]);
-
-  // 30-second Auto-save mechanism with visual countdown
-  useEffect(() => {
-    if (!hasUnsavedChanges) {
-      setAutoSaveCountdown(null);
-      return;
-    }
-
-    const AUTO_SAVE_SECONDS = 30;
-    setAutoSaveCountdown(AUTO_SAVE_SECONDS);
-
-    const countdownInterval = setInterval(() => {
-      setAutoSaveCountdown(prev => {
-        if (prev === null || prev <= 1) {
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    const autoSaveTimer = setTimeout(() => {
-      executeCloudSave(stateRef.current);
-    }, AUTO_SAVE_SECONDS * 1000);
-
-    return () => {
-      clearInterval(countdownInterval);
-      clearTimeout(autoSaveTimer);
-    };
-  }, [hasUnsavedChanges, state, executeCloudSave]);
-
-  // Shortcut: Ctrl+S / Cmd+S to save manually
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        if (hasUnsavedChanges && !isSavingRef.current) {
-          executeCloudSave(stateRef.current);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasUnsavedChanges, executeCloudSave]);
-
-  // Warn user when closing tab if there are unsaved cloud changes
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-        return '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
-  const handleResetToInitial = useCallback(async () => {
-    const initial = userId ? getEmptyUserState() : getInitialState();
-    setState(initial);
-    saveLocalUserState(initial, userId);
-    await executeCloudSave(initial);
-  }, [userId, executeCloudSave]);
+  const {
+    isSaving,
+    hasUnsavedChanges,
+    lastSavedAt,
+    autoSaveCountdown,
+    handleManualSave,
+    handleDiscardChanges,
+    handleResetToInitial
+  } = useCloudSync(state, setState, userId);
 
   // Filter points belonging to active schedule (or all if activeCronogramaId === 'all')
   const activeSchedulePoints = useMemo(() => {
@@ -1629,10 +1381,10 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
               onDeleteSessao={handleDeleteSessao}
               onUpdateSessao={handleUpdateSessao}
               activeTimer={activeTimer}
-              onStartTimer={(cfg) => setActiveTimer({ ...cfg, isRunning: true, secondsElapsed: 0 })}
-              onPauseTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: false }))}
-              onResumeTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: true }))}
-              onResetTimer={() => setActiveTimer(prev => ({ ...prev, isRunning: false, secondsElapsed: 0 }))}
+              onStartTimer={startTimer}
+              onPauseTimer={pauseTimer}
+              onResumeTimer={resumeTimer}
+              onResetTimer={resetTimer}
             />
           )}
 
@@ -1820,10 +1572,7 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
       <FocusDurationModal
         isOpen={isFocusDurationModalOpen}
-        onClose={() => {
-          setIsFocusDurationModalOpen(false);
-          setFocusTargetPonto(null);
-        }}
+        onClose={handleCloseFocusDuration}
         ponto={focusTargetPonto}
         materiaCor={focusTargetPonto ? (state.materiasCores[focusTargetPonto.materia] || '#d97706') : '#d97706'}
         onConfirm={handleConfirmStartFocus}
