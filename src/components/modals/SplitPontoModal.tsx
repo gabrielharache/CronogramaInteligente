@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PontoEstudo } from '../../types';
 import { X, Calendar, Layers, Split } from 'lucide-react';
-import { addDays, formatarDataBr } from '../../utils/helpers';
+import { addDays, formatarDataBr, hojeStr } from '../../utils/helpers';
 
 interface SplitPontoModalProps {
   isOpen: boolean;
@@ -23,7 +23,7 @@ export const SplitPontoModal: React.FC<SplitPontoModalProps> = ({
   useEffect(() => {
     if (ponto && isOpen) {
       const initialParts = [];
-      const baseDate = ponto.data || new Date().toISOString().split('T')[0];
+      const baseDate = ponto.data || hojeStr();
       
       for (let i = 1; i <= numParts; i++) {
         // Pre-fill parts: Part 1 gets baseDate, Part 2 gets baseDate + 7 days, Part 3 gets baseDate + 14 days, etc.

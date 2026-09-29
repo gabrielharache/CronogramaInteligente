@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PontoEstudo, Cronograma, TipoEstudo } from '../../types';
 import { COLOR_PALETTE } from '../../data/seed';
-import { getDiaDaSemana } from '../../utils/helpers';
+import { getDiaDaSemana, hojeStr } from '../../utils/helpers';
 import { X, BookOpen, AlertCircle, Scale, Landmark, Layers } from 'lucide-react';
 
 interface PontoModalProps {
@@ -75,7 +75,7 @@ export const PontoModal: React.FC<PontoModalProps> = ({
       setIsNovaMateria(false);
       setNovaMateriaNome('');
       setNovaMateriaCor(COLOR_PALETTE[Math.floor(Math.random() * COLOR_PALETTE.length)]);
-      setData(initialDate || new Date().toISOString().slice(0, 10));
+      setData(initialDate || hojeStr());
       setNotas('');
     }
     setError('');

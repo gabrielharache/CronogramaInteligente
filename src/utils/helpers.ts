@@ -14,8 +14,7 @@ export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
 }
 
-export function hojeStr(): string {
-  const d = new Date();
+export function hojeStr(d: Date = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -97,13 +96,13 @@ export function getWeekStart(dataStr: string): string {
   const d = new Date(dataStr + 'T12:00:00');
   const dayOfWeek = (d.getDay() + 6) % 7; // Monday = 0
   d.setDate(d.getDate() - dayOfWeek);
-  return d.toISOString().slice(0, 10);
+  return hojeStr(d);
 }
 
 export function addDays(dataStr: string, n: number): string {
   const d = new Date(dataStr + 'T12:00:00');
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return hojeStr(d);
 }
 
 export function formatarSemanaLabel(weekStartStr: string): string {
@@ -626,7 +625,7 @@ export function distributePlannedDates(
       itemsOnCurrentDay = 0;
     }
 
-    dates.push(current.toISOString().slice(0, 10));
+    dates.push(hojeStr(current));
     itemsOnCurrentDay++;
 
     if (itemsOnCurrentDay >= options.topicsPerDay) {

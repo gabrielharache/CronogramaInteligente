@@ -134,10 +134,15 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
 
   useEffect(() => {
     if (!activeTimer.isRunning) return;
+    // Advance by wall-clock time so background-tab throttling or sleep doesn't make the timer drift
+    let lastTick = Date.now();
     const interval = setInterval(() => {
+      const delta = Math.floor((Date.now() - lastTick) / 1000);
+      if (delta <= 0) return;
+      lastTick += delta * 1000;
       setActiveTimer(prev => {
         if (!prev.isRunning) return prev;
-        return { ...prev, secondsElapsed: prev.secondsElapsed + 1 };
+        return { ...prev, secondsElapsed: prev.secondsElapsed + delta };
       });
     }, 1000);
     return () => clearInterval(interval);
