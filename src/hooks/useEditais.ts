@@ -156,7 +156,7 @@ export function useEditais(setState: Dispatch<SetStateAction<AppState>>) {
         activeCronogramaId: newCroId,
         ui: {
           ...prev.ui,
-          activeTab: 'cronograma'
+          activeTab: 'pontos'
         }
       };
     });
