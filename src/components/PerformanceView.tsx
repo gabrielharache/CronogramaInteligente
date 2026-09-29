@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { PontoEstudo, SessaoEstudo, Cronograma, TipoEstudo } from '../types';
-import { calcularPercentualAcerto, calcularDificuldadeAutomatica, getDificuldadeInfo, formatarDataBr } from '../utils/helpers';
+import { calcularPercentualAcerto, calcularDificuldadeAutomatica, getDificuldadeInfo, formatarDataBr, hojeStr } from '../utils/helpers';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -57,7 +57,7 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
   const [timeFilterSubject, setTimeFilterSubject] = useState<string>('todas');
 
   // Filter States
-  const [filterPeriod, setFilterPeriod] = useState<'all' | '7d' | '30d' | '90d'>('all');
+  const [filterPeriod, setFilterPeriod] = useState<'all' | 'hoje' | '7d' | '30d' | '90d'>('all');
   const [filterCronograma, setFilterCronograma] = useState<string>('all');
   const [filterStudyType, setFilterStudyType] = useState<string>('all');
 
@@ -82,13 +82,18 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
 
     // Filter by Date Period (checking ponto.data)
     if (filterPeriod !== 'all') {
-      const cutoffDate = new Date();
-      if (filterPeriod === '7d') cutoffDate.setDate(cutoffDate.getDate() - 7);
-      else if (filterPeriod === '30d') cutoffDate.setDate(cutoffDate.getDate() - 30);
-      else if (filterPeriod === '90d') cutoffDate.setDate(cutoffDate.getDate() - 90);
+      if (filterPeriod === 'hoje') {
+        const todayStr = hojeStr();
+        result = result.filter(p => p.data === todayStr);
+      } else {
+        const cutoffDate = new Date();
+        if (filterPeriod === '7d') cutoffDate.setDate(cutoffDate.getDate() - 7);
+        else if (filterPeriod === '30d') cutoffDate.setDate(cutoffDate.getDate() - 30);
+        else if (filterPeriod === '90d') cutoffDate.setDate(cutoffDate.getDate() - 90);
 
-      const cutoffStr = cutoffDate.toISOString().slice(0, 10);
-      result = result.filter(p => p.data && p.data >= cutoffStr);
+        const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+        result = result.filter(p => p.data && p.data >= cutoffStr);
+      }
     }
 
     return result;
@@ -112,13 +117,18 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
 
     // Filter by Date Period
     if (filterPeriod !== 'all') {
-      const cutoffDate = new Date();
-      if (filterPeriod === '7d') cutoffDate.setDate(cutoffDate.getDate() - 7);
-      else if (filterPeriod === '30d') cutoffDate.setDate(cutoffDate.getDate() - 30);
-      else if (filterPeriod === '90d') cutoffDate.setDate(cutoffDate.getDate() - 90);
+      if (filterPeriod === 'hoje') {
+        const todayStr = hojeStr();
+        result = result.filter(s => s.data === todayStr);
+      } else {
+        const cutoffDate = new Date();
+        if (filterPeriod === '7d') cutoffDate.setDate(cutoffDate.getDate() - 7);
+        else if (filterPeriod === '30d') cutoffDate.setDate(cutoffDate.getDate() - 30);
+        else if (filterPeriod === '90d') cutoffDate.setDate(cutoffDate.getDate() - 90);
 
-      const cutoffStr = cutoffDate.toISOString().slice(0, 10);
-      result = result.filter(s => s.data && s.data >= cutoffStr);
+        const cutoffStr = cutoffDate.toISOString().slice(0, 10);
+        result = result.filter(s => s.data && s.data >= cutoffStr);
+      }
     }
 
     return result;
@@ -434,6 +444,7 @@ export const PerformanceView: React.FC<PerformanceViewProps> = ({
               className="w-full bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-900 cursor-pointer"
             >
               <option value="all">Todo o histórico</option>
+              <option value="hoje">Hoje</option>
               <option value="7d">Últimos 7 dias</option>
               <option value="30d">Últimos 30 dias</option>
               <option value="90d">Últimos 90 dias</option>
