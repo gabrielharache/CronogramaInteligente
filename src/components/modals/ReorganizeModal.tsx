@@ -629,10 +629,12 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     let duasVezes = 0;
     let padrao = 0;
     let bloco = 0;
+    let todoDia = 0;
 
     materiaOrder.forEach(mat => {
       const cfg = materiaConfigs[mat]?.frequencia || 'padrao';
-      if (cfg === 'toda_semana') todaSemana++;
+      if (cfg === 'todo_dia') todoDia++;
+      else if (cfg === 'toda_semana') todaSemana++;
       else if (cfg === 'intercalada') {
         if (materiaConfigs[mat]?.grupoIntercalacao === 'B') intercaladasB++;
         else intercaladasA++;
@@ -641,7 +643,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       else padrao++;
     });
 
-    return { todaSemana, intercaladasA, intercaladasB, duasVezes, padrao, bloco };
+    return { todaSemana, intercaladasA, intercaladasB, duasVezes, padrao, bloco, todoDia };
   }, [materiaOrder, materiaConfigs]);
 
   if (!isOpen) return null;
@@ -1314,6 +1316,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   {/* Summary of active rules */}
                   <div className="flex items-center gap-2 flex-wrap text-xs bg-zinc-50 p-2.5 rounded-lg border border-zinc-200">
                     <span className="text-[11px] font-semibold text-zinc-500">Configuração Atual:</span>
+                    {freqSummary.todoDia > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-semibold text-[11px]">
+                        📅 {freqSummary.todoDia} Todo Dia
+                      </span>
+                    )}
                     {freqSummary.todaSemana > 0 && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-semibold text-[11px]">
                         <Zap className="w-3 h-3 text-amber-600" />
@@ -1378,7 +1385,9 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                                 value={cfg.frequencia}
                                 onChange={(e) => handleUpdateMateriaFreq(materia, e.target.value as any)}
                                 className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
-                                  cfg.frequencia === 'toda_semana'
+                                  cfg.frequencia === 'todo_dia'
+                                    ? 'bg-emerald-50 text-emerald-900 border-emerald-300 font-bold'
+                                    : cfg.frequencia === 'toda_semana'
                                     ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold'
                                     : cfg.frequencia === 'intercalada'
                                     ? 'bg-purple-50 text-purple-900 border-purple-300 font-bold'
@@ -1389,6 +1398,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                                     : 'bg-white text-zinc-700 border-zinc-200'
                                 }`}
                               >
+                                <option value="todo_dia">📅 Todo Dia (Diária)</option>
                                 <option value="toda_semana">🌟 Toda Semana (Obrigatória)</option>
                                 <option value="intercalada">🔀 Intercalada (Alternar Semanas)</option>
                                 <option value="duas_vezes">⚡ 2x por Semana (Reforço)</option>

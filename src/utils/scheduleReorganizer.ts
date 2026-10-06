@@ -2,6 +2,7 @@ import { PontoEstudo } from '../types';
 import { getDiaDaSemana, DIAS_SEMANA_CURTO } from './helpers';
 
 export type MateriaFrequencyMode = 
+  | 'todo_dia'      // Todo dia (Aparece em todos os dias de estudo)
   | 'toda_semana'   // Aparece toda semana (Matéria tronco/obrigatória)
   | 'duas_vezes'    // 2x por semana (Alta prioridade / maior carga)
   | 'intercalada'   // Intercalada (Semana sim, semana não — alternando entre grupos)
@@ -296,14 +297,11 @@ export function calculateSmartSchedule(
 
       // Must be >= startDate and in studyDays
       if (dateStr >= startDate && studyDays.includes(dayOfWeek)) {
-        const occupied = occupiedCountByDate[dateStr] || 0;
-        if (occupied < topicsPerDay) {
-          weekStudyDays.push({
-            dateStr,
-            dateObj: checkDay,
-            dayOfWeek
-          });
-        }
+        weekStudyDays.push({
+          dateStr,
+          dateObj: checkDay,
+          dayOfWeek
+        });
       }
     }
 
@@ -324,7 +322,14 @@ export function calculateSmartSchedule(
 
       const cfg = materiaConfigs[mat] || { materia: mat, frequencia: 'padrao' };
 
-      if (cfg.frequencia === 'toda_semana') {
+      if (cfg.frequencia === 'todo_dia') {
+        // Todo dia: quota is equal to the number of valid study days in the week
+        weekMateriaQuotas.push({
+          materia: mat,
+          quota: Math.min(weekStudyDays.length, availableCount),
+          fixedDays: studyDays
+        });
+      } else if (cfg.frequencia === 'toda_semana') {
         weekMateriaQuotas.push({
           materia: mat,
           quota: 1,
@@ -362,13 +367,23 @@ export function calculateSmartSchedule(
       const occupied = occupiedCountByDate[d.dateStr] || 0;
       return acc + Math.max(0, topicsPerDay - occupied);
     }, 0);
-    let slotsFilledThisWeek = weekMateriaQuotas.reduce((acc, q) => acc + q.quota, 0);
 
-    // If weekly quotas exceed weekly slots, scale down lowest priority quotas
+    // Ignore 'todo_dia' from quota reduction calculations because it runs outside normal limits
+    let slotsFilledThisWeek = weekMateriaQuotas
+      .filter(q => {
+        const cfg = materiaConfigs[q.materia];
+        return cfg?.frequencia !== 'todo_dia';
+      })
+      .reduce((acc, q) => acc + q.quota, 0);
+
+    // If weekly quotas exceed weekly slots, scale down lowest priority quotas (excluding 'todo_dia')
     if (slotsFilledThisWeek > totalWeeklySlots) {
-      // Keep toda_semana and intercalada, reduce duas_vezes if needed
       let excess = slotsFilledThisWeek - totalWeeklySlots;
       for (let i = weekMateriaQuotas.length - 1; i >= 0 && excess > 0; i--) {
+        const mat = weekMateriaQuotas[i].materia;
+        const cfg = materiaConfigs[mat];
+        if (cfg?.frequencia === 'todo_dia') continue; // Never scale down 'todo_dia'
+
         if (weekMateriaQuotas[i].quota > 1) {
           weekMateriaQuotas[i].quota--;
           excess--;
@@ -419,18 +434,28 @@ export function calculateSmartSchedule(
       dayAllocations[d.dateStr] = [];
     });
 
-    // 1. First, assign subjects with specific fixed days
+    // 1. First, assign subjects with specific fixed days or 'todo_dia'
     weekMateriaQuotas.forEach(entry => {
-      if (entry.fixedDays && entry.fixedDays.length > 0) {
-        const matchingDays = weekStudyDays.filter(d => entry.fixedDays!.includes(d.dayOfWeek));
+      const cfg = materiaConfigs[entry.materia] || { materia: entry.materia, frequencia: 'padrao' };
+      const isTodoDia = cfg.frequencia === 'todo_dia';
+      const hasFixedDays = entry.fixedDays && entry.fixedDays.length > 0;
+
+      if (isTodoDia || hasFixedDays) {
+        const allowedDays = isTodoDia ? studyDays : entry.fixedDays!;
+        const matchingDays = weekStudyDays.filter(d => allowedDays.includes(d.dayOfWeek));
+        
         for (const targetDay of matchingDays) {
-          const occupied = occupiedCountByDate[targetDay.dateStr] || 0;
-          if (entry.quota > 0 && dayAllocations[targetDay.dateStr].length + occupied < topicsPerDay) {
-            const topic = queues[entry.materia]?.shift();
-            if (topic) {
-              dayAllocations[targetDay.dateStr].push(topic);
-              entry.quota--;
-              remainingTopicsCount--;
+          if (entry.quota > 0) {
+            // Prevent duplicate topics of the SAME subject on the SAME day
+            const jaTemEssaMateriaNoDia = dayAllocations[targetDay.dateStr].some(p => p.materia === entry.materia);
+            
+            if (!jaTemEssaMateriaNoDia) {
+              const topic = queues[entry.materia]?.shift();
+              if (topic) {
+                dayAllocations[targetDay.dateStr].push(topic);
+                entry.quota--;
+                remainingTopicsCount--;
+              }
             }
           }
         }
@@ -470,19 +495,32 @@ export function calculateSmartSchedule(
       const topic = queues[mat]?.shift();
       if (!topic) return;
 
-      // Find best day: day with < topicsPerDay (including occupied) and without this subject
+      // Find best day: day with < topicsPerDay (for cycle subjects) and without this subject
       let bestDay = weekStudyDays.find(d => {
-        const currentList = dayAllocations[d.dateStr];
+        const currentList = dayAllocations[d.dateStr] || [];
+        
+        // Count only non-fixed, non-daily (cycle) subjects already scheduled for today
+        const cicloListCount = currentList.filter(p => {
+          const mCfg = materiaConfigs[p.materia];
+          return mCfg?.frequencia !== 'todo_dia' && !(mCfg?.diasPermitidos && mCfg.diasPermitidos.length > 0);
+        }).length;
+
         const occupied = occupiedCountByDate[d.dateStr] || 0;
-        return currentList.length + occupied < topicsPerDay && (!avoidSameSubjectPerDay || !currentList.some(p => p.materia === mat));
+        return cicloListCount + occupied < topicsPerDay && (!avoidSameSubjectPerDay || !currentList.some(p => p.materia === mat));
       });
 
-      // Fallback: any day with < topicsPerDay (including occupied)
+      // Fallback: any day with < topicsPerDay (for cycle subjects)
       if (!bestDay) {
         bestDay = weekStudyDays.find(d => {
-          const currentList = dayAllocations[d.dateStr];
+          const currentList = dayAllocations[d.dateStr] || [];
+          
+          const cicloListCount = currentList.filter(p => {
+            const mCfg = materiaConfigs[p.materia];
+            return mCfg?.frequencia !== 'todo_dia' && !(mCfg?.diasPermitidos && mCfg.diasPermitidos.length > 0);
+          }).length;
+
           const occupied = occupiedCountByDate[d.dateStr] || 0;
-          return currentList.length + occupied < topicsPerDay;
+          return cicloListCount + occupied < topicsPerDay;
         });
       }
 
