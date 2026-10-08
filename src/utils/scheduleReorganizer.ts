@@ -375,17 +375,7 @@ export function calculateScheduleFixedWeekly(
       for (const slot of activeSlots) {
         if (!slot.materia) continue;
 
-        let queue = queues[slot.materia];
-        
-        // Se a matéria do slot já terminou 100%, mas outras matérias da grade ainda têm tópicos,
-        // aloca a próxima matéria disponível para não deixar o dia ocioso
-        if ((!queue || queue.length === 0) && remainingCount > 0) {
-          const alternateMat = Object.keys(queues).find(m => (queues[m] || []).length > 0);
-          if (alternateMat) {
-            queue = queues[alternateMat];
-          }
-        }
-
+        const queue = queues[slot.materia];
         if (queue && queue.length > 0) {
           const topic = pullTopicFromMateria(queue, slot.tipoEstudo, scheduledTodayPointIds);
           if (topic) {
@@ -400,15 +390,16 @@ export function calculateScheduleFixedWeekly(
       }
     }
 
-    // Se houver matérias selecionadas que NÃO estavam cadastradas na grade fixa,
-    // e o dia atual tem slots de estudo mas sobraram vagas, distribui os tópicos restantes
-    const materiasRestantesSemSlot = Object.keys(queues).filter(
-      m => (queues[m] || []).length > 0 && !materiasConfiguradasNaGrade.has(m)
+    // Se todas as matérias cadastradas na grade já tiverem terminado 100%, mas ainda
+    // restarem tópicos de matérias selecionadas que não tinham dia fixo, distribui nos dias com estudo
+    const materiasConfiguradasAindaComTopicos = Array.from(materiasConfiguradasNaGrade).some(
+      m => (queues[m] || []).length > 0
     );
 
-    if (materiasRestantesSemSlot.length > 0 && slotsDoDia.length > 0 && remainingCount > 0) {
-      for (const mat of materiasRestantesSemSlot) {
-        if (remainingCount <= 0) break;
+    if (!materiasConfiguradasAindaComTopicos && remainingCount > 0 && slotsDoDia.length > 0) {
+      const materiasRestantes = Object.keys(queues).filter(m => (queues[m] || []).length > 0);
+      for (let i = 0; i < slotsDoDia.length && remainingCount > 0; i++) {
+        const mat = materiasRestantes[i % materiasRestantes.length];
         const queue = queues[mat];
         if (queue && queue.length > 0) {
           const topic = pullTopicFromMateria(queue, 'qualquer', scheduledTodayPointIds);

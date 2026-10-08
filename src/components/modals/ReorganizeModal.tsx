@@ -41,7 +41,10 @@ import {
   RefreshCw,
   Clock,
   AlertCircle,
-  Split
+  Split,
+  CheckSquare,
+  Square,
+  RotateCcw
 } from 'lucide-react';
 
 interface ReorganizeModalProps {
@@ -78,6 +81,8 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   // Navigation / Tabs
   const [activeTab, setActiveTab] = useState<'grade_fixa' | 'ciclo' | 'empurrar' | 'preview'>('grade_fixa');
   const [startDate, setStartDate] = useState<string>(hojeStr());
+  
+  // Scope: 'pending' (apenas não estudados) ou 'all' (todos os tópicos inclusive concluídos)
   const [scope, setScope] = useState<'pending' | 'all'>('pending');
 
   // Strategy Mode
@@ -86,11 +91,12 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   // Split management toggle: preserve multi-session splits or unify them
   const [preserveSplitSessions, setPreserveSplitSessions] = useState<boolean>(true);
 
-  // Subjects Selection
+  // Available materias
   const allMaterias = useMemo(() => {
     return (Array.from(new Set(pontos.map(p => p.materia))) as string[]).sort((a, b) => a.localeCompare(b, 'pt'));
   }, [pontos]);
 
+  // Selected materias to be placed in calendar. Unselected will be removed from calendar and kept only in "Matérias" tab!
   const [selectedMaterias, setSelectedMaterias] = useState<string[]>([]);
 
   // Presets
@@ -138,7 +144,6 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     if (isOpen) {
       setSelectedMaterias(allMaterias);
 
-      // Order materias
       let order = [...allMaterias];
       if (globalMateriaOrder && globalMateriaOrder.length > 0) {
         const orderMap = new Map<string, number>(globalMateriaOrder.map((m, idx) => [m, idx]));
@@ -184,7 +189,6 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
           }
         });
 
-        // Sábado com jurisprudência
         if (subjects.length > 0) {
           initial[6].push({
             id: `slot_6_1`,
@@ -199,34 +203,33 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     }
   }, [isOpen, allMaterias, globalMateriaOrder]);
 
-  // Points breakdown
-  const pendingPoints = useMemo(() => {
-    return pontos.filter(p => !isConcluido(p) && selectedMaterias.includes(p.materia));
+  // Points target list based on selectedMaterias and scope
+  const targetPointsToSchedule = useMemo(() => {
+    return pontos.filter(p => {
+      if (!selectedMaterias.includes(p.materia)) return false;
+      if (scope === 'pending') {
+        return !isConcluido(p);
+      }
+      return true; // scope === 'all' includes both pending and completed
+    });
+  }, [pontos, selectedMaterias, scope, isConcluido]);
+
+  const completedPointsCount = useMemo(() => {
+    return pontos.filter(p => isConcluido(p) && selectedMaterias.includes(p.materia)).length;
   }, [pontos, selectedMaterias, isConcluido]);
 
-  const completedPoints = useMemo(() => {
-    return pontos.filter(p => isConcluido(p));
-  }, [pontos, isConcluido]);
+  const pendingPointsCount = useMemo(() => {
+    return pontos.filter(p => !isConcluido(p) && selectedMaterias.includes(p.materia)).length;
+  }, [pontos, selectedMaterias, isConcluido]);
+
+  const unselectedPointsCount = useMemo(() => {
+    return pontos.filter(p => !selectedMaterias.includes(p.materia)).length;
+  }, [pontos, selectedMaterias]);
 
   // Identify topics that have been divided into multiple sessions (Split)
   const dividedPointsCount = useMemo(() => {
-    return pendingPoints.filter(p => p.datas && p.datas.length > 1).length;
-  }, [pendingPoints]);
-
-  // Identify subjects with topics but NO slot configured on the fixed schedule
-  const materiasConfiguradasNaGrade = useMemo(() => {
-    const set = new Set<string>();
-    Object.values(fixedSchedule).forEach((slots: FixedWeeklySlot[]) => {
-      slots.forEach(s => {
-        if (s.materia) set.add(s.materia);
-      });
-    });
-    return set;
-  }, [fixedSchedule]);
-
-  const materiasSemSlot = useMemo(() => {
-    return selectedMaterias.filter(m => !materiasConfiguradasNaGrade.has(m));
-  }, [selectedMaterias, materiasConfiguradasNaGrade]);
+    return targetPointsToSchedule.filter(p => p.datas && p.datas.length > 1).length;
+  }, [targetPointsToSchedule]);
 
   // Points with past dates that are not finished (Atrasados)
   const atrasadosPoints = useMemo(() => {
@@ -242,23 +245,18 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     return customDays;
   }, [studyDaysMode, customDays]);
 
-  // Group pending points by subject with logical order
+  // Group target points by subject with logical order
   const pointsByMateria = useMemo(() => {
     const grouped: Record<string, PontoEstudo[]> = {};
     selectedMaterias.forEach(mat => {
       grouped[mat] = [];
     });
 
-    const targetList = scope === 'pending'
-      ? pontos.filter(p => !isConcluido(p) && selectedMaterias.includes(p.materia))
-      : pontos.filter(p => selectedMaterias.includes(p.materia));
-
-    targetList.forEach(p => {
+    targetPointsToSchedule.forEach(p => {
       if (!grouped[p.materia]) grouped[p.materia] = [];
       grouped[p.materia].push(p);
     });
 
-    // Sort logically by ordem or createdAt
     Object.keys(grouped).forEach(mat => {
       grouped[mat].sort((a, b) => {
         const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
@@ -269,22 +267,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     });
 
     return grouped;
-  }, [pontos, selectedMaterias, scope, isConcluido]);
-
-  // Occupied count by date from unselected materias
-  const occupiedCountByDate = useMemo(() => {
-    const occupied: Record<string, number> = {};
-    pontos.forEach(p => {
-      if (!selectedMaterias.includes(p.materia) && p.data) {
-        occupied[p.data] = (occupied[p.data] || 0) + 1;
-      }
-    });
-    return occupied;
-  }, [pontos, selectedMaterias]);
+  }, [targetPointsToSchedule, selectedMaterias]);
 
   // Calculate schedule based on current strategy
   const calculationResult = useMemo(() => {
-    if (!startDate || pendingPoints.length === 0) {
+    if (!startDate || targetPointsToSchedule.length === 0) {
       return {
         orderedPoints: [],
         calculatedDates: [],
@@ -303,13 +290,13 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         pointsByMateria,
         fixedSchedule,
         startDate,
-        occupiedCountByDate,
+        {},
         preserveSplitSessions
       );
     }
 
     if (strategy === 'empurrar_atrasados') {
-      const sortedPending = [...pendingPoints].sort((a, b) => {
+      const sortedPending = [...targetPointsToSchedule].sort((a, b) => {
         if (a.data && b.data && a.data !== b.data) return a.data.localeCompare(b.data);
         const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
         const oB = typeof b.ordem === 'number' ? b.ordem : 999999;
@@ -320,7 +307,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         startDate,
         studyDays: activeCycleStudyDays,
         topicsPerDay,
-        occupiedCountByDate
+        occupiedCountByDate: {}
       });
     }
 
@@ -331,7 +318,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       studyDays: activeCycleStudyDays,
       materiaOrder: materiaOrder.filter(m => selectedMaterias.includes(m)),
       avoidSameSubjectPerDay,
-      occupiedCountByDate,
+      occupiedCountByDate: {},
       preserveSplitSessions
     });
   }, [
@@ -339,8 +326,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     pointsByMateria,
     fixedSchedule,
     startDate,
-    occupiedCountByDate,
-    pendingPoints,
+    targetPointsToSchedule,
     activeCycleStudyDays,
     topicsPerDay,
     materiaOrder,
@@ -359,7 +345,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
 
   // Handlers for Grade Semanal Fixa
   const handleAddSlotToDay = (dayOfWeek: number, subjectName?: string) => {
-    const targetMateria = subjectName || materiaOrder[0] || allMaterias[0] || 'Geral';
+    const targetMateria = subjectName || selectedMaterias[0] || materiaOrder[0] || allMaterias[0] || 'Geral';
     const newSlot: FixedWeeklySlot = {
       id: `slot_${dayOfWeek}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       materia: targetMateria,
@@ -387,15 +373,17 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     }));
   };
 
-  // Auto-distribute all subjects across available study days
+  // Auto-distribute ONLY selected materias across study days
   const handleAutoDistributeGrade = () => {
-    const subjects = materiaOrder.filter(m => selectedMaterias.includes(m));
-    if (subjects.length === 0) return;
+    const subjects = selectedMaterias;
+    if (subjects.length === 0) {
+      showFeedback('Selecione pelo menos uma matéria para distribuir!', 'info');
+      return;
+    }
 
     const newSchedule: FixedWeeklySchedule = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 0: [] };
     let subIdx = 0;
 
-    // Se temos mais matérias que dias, usa alternância A/B ou múltiplos slots por dia
     const daysAvailable = [1, 2, 3, 4, 5];
     const slotsPerDay = subjects.length > 8 ? 2 : Math.max(1, Math.ceil(subjects.length / daysAvailable.length));
 
@@ -412,9 +400,8 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       }
     });
 
-    // Se ainda restam matérias não alocadas, coloca no Sábado ou alterna na Semana B
+    // Sábado se sobrarem matérias
     if (subIdx < subjects.length) {
-      // Sábado
       while (subIdx < subjects.length && (newSchedule[6] || []).length < 2) {
         newSchedule[6].push({
           id: `auto_6_${subIdx}`,
@@ -426,7 +413,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       }
     }
 
-    // Se ainda restam, alterna como Semana B nos dias de semana
+    // Alternância Semana B se ainda sobrarem
     if (subIdx < subjects.length) {
       daysAvailable.forEach(day => {
         if (subIdx < subjects.length) {
@@ -442,7 +429,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     }
 
     setFixedSchedule(newSchedule);
-    showFeedback('Todas as suas matérias foram distribuídas na grade!', 'info');
+    showFeedback('As matérias selecionadas foram distribuídas na grade!', 'info');
   };
 
   const handleClearGrade = () => {
@@ -457,14 +444,16 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
 
     if (preset.strategy === 'grade_fixa' && preset.fixedSchedule) {
       const mapped: FixedWeeklySchedule = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 0: [] };
-      const subList = materiaOrder.length > 0 ? materiaOrder : allMaterias;
+      const subList = selectedMaterias.length > 0 ? selectedMaterias : allMaterias;
 
       Object.entries(preset.fixedSchedule).forEach(([dayStr, slots]) => {
         const d = Number(dayStr);
         mapped[d] = slots.map((s, idx) => ({
           ...s,
           id: `slot_${d}_${Date.now()}_${idx}`,
-          materia: s.materia || subList[idx % subList.length] || allMaterias[0] || 'Geral'
+          materia: s.materia && selectedMaterias.includes(s.materia) 
+            ? s.materia 
+            : subList[idx % subList.length] || selectedMaterias[0] || 'Geral'
         }));
       });
       setFixedSchedule(mapped);
@@ -504,31 +493,38 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     showFeedback(`Preset "${newPreset.nome}" salvo!`, 'success');
   };
 
-  // Execution Handler - 100% ROBUST & PROPERLY SYNCS MULTI-SESSION SPLITS!
+  // Execution Handler - ACCURATE & STRICT TO USER REQUEST
   const handleExecute = () => {
     if (orderedPoints.length === 0) return;
 
     const finalPointsList: PontoEstudo[] = [];
 
-    // 1. Process all original points
+    // Process all points in the schedule
     pontos.forEach(p => {
-      // COMPLETED POINTS: Always keep their original data and progress intact!
-      if (isConcluido(p)) {
-        finalPointsList.push(p);
-        return;
-      }
-
-      // UNSELECTED MATERIAS: Keep original data intact!
+      // 1. UNSELECTED SUBJECTS:
+      // Remove from calendar dates! They remain accessible in the "Matérias" tab.
       if (!selectedMaterias.includes(p.materia)) {
+        finalPointsList.push({
+          ...p,
+          data: '',
+          datas: undefined,
+          updatedAt: Date.now()
+        });
+        return;
+      }
+
+      // 2. SELECTED SUBJECTS:
+      // If scope is 'pending' and point is ALREADY completed:
+      // Keep its historical completion date and progress intact!
+      if (scope === 'pending' && isConcluido(p)) {
         finalPointsList.push(p);
         return;
       }
 
-      // REORGANIZED PENDING POINTS:
+      // 3. POINTS REORGANIZED ONTO THE CALENDAR:
       if (datesByPointId[p.id] && datesByPointId[p.id].length > 0) {
         const assignedDates = datesByPointId[p.id];
         
-        // Se preserva divisão e tinha múltiplas datas calculadas, sincroniza datas e data
         if (preserveSplitSessions && assignedDates.length > 1) {
           finalPointsList.push({
             ...p,
@@ -537,17 +533,21 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
             updatedAt: Date.now()
           });
         } else {
-          // Unificado ou ponto comum de 1 sessão
           finalPointsList.push({
             ...p,
             data: assignedDates[0],
-            datas: undefined, // Limpa o array antigo de split para não ficar preso no passado!
+            datas: undefined,
             updatedAt: Date.now()
           });
         }
       } else {
-        // Fallback: keep intact
-        finalPointsList.push(p);
+        // Fallback: if not assigned, keep in state without dates
+        finalPointsList.push({
+          ...p,
+          data: '',
+          datas: undefined,
+          updatedAt: Date.now()
+        });
       }
     });
 
@@ -581,7 +581,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 )}
               </div>
               <p className="text-xs text-zinc-500">
-                Grade semanal com matérias fixas por dia, alternância A/B e sincronização de tópicos divididos.
+                Escolha quais matérias entram no calendário e redistribua seus assuntos com precisão.
               </p>
             </div>
           </div>
@@ -698,7 +698,167 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
             </div>
           )}
 
-          {/* SPLIT / DIVISÃO DE MATÉRIAS NOTICE & CONTROLS */}
+          {/* SECTION A: SELEÇÃO DE DISCIPLINAS NO CALENDÁRIO */}
+          <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-800 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-zinc-700" />
+                  <span>Disciplinas no Calendário ({selectedMaterias.length}/{allMaterias.length})</span>
+                </h4>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  As matérias desmarcadas <strong>não serão distribuídas no calendário</strong>, permanecendo salvas na aba <strong>"Matérias"</strong>.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMaterias([...allMaterias])}
+                  className="px-2.5 py-1 font-semibold rounded-lg bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  Selecionar Todas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMaterias([])}
+                  className="px-2.5 py-1 font-semibold rounded-lg bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  Limpar Seleção
+                </button>
+              </div>
+            </div>
+
+            {/* Disciplines Chips Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 pt-1 max-h-36 overflow-y-auto pr-1">
+              {allMaterias.map(mat => {
+                const isSelected = selectedMaterias.includes(mat);
+                const cor = materiasCores[mat] || '#d97706';
+                const totalInMat = pontos.filter(p => p.materia === mat).length;
+                const pendInMat = pontos.filter(p => p.materia === mat && !isConcluido(p)).length;
+
+                return (
+                  <button
+                    key={mat}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedMaterias(prev => prev.filter(m => m !== mat));
+                      } else {
+                        setSelectedMaterias(prev => [...prev, mat]);
+                      }
+                    }}
+                    className={`flex items-center justify-between p-2 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-white border-zinc-300 shadow-2xs hover:border-zinc-400'
+                        : 'bg-zinc-100/70 border-zinc-200 opacity-60 hover:opacity-90'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span 
+                        className="w-2.5 h-2.5 rounded-full shrink-0" 
+                        style={{ backgroundColor: cor }} 
+                      />
+                      <span className="text-xs font-bold text-zinc-900 truncate">
+                        {mat}
+                      </span>
+                    </div>
+
+                    <div className="text-right shrink-0 pl-1.5 flex flex-col items-end">
+                      <span className="text-[10px] font-mono text-zinc-500 font-bold">
+                        {pendInMat}/{totalInMat}
+                      </span>
+                      {!isSelected && (
+                        <span className="text-[8px] font-bold text-amber-700 bg-amber-50 px-1 rounded-sm uppercase tracking-tight mt-0.5">
+                          Aba Matérias
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* SECTION B: ESCOPO DOS ASSUNTOS (PENDENTES vs TODOS) */}
+          <div className="p-4 bg-white border border-zinc-200 rounded-2xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-800 block">
+                Escopo dos Tópicos a Distribuir
+              </span>
+              <span className="text-xs text-zinc-500">
+                {targetPointsToSchedule.length} tópicos serão agendados no calendário
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Option 1: Apenas Pendentes */}
+              <button
+                type="button"
+                onClick={() => setScope('pending')}
+                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                  scope === 'pending'
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                    : 'bg-zinc-50 text-zinc-800 border-zinc-200 hover:bg-zinc-100'
+                }`}
+              >
+                <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
+                  scope === 'pending' ? 'bg-zinc-800 text-amber-400' : 'bg-white text-zinc-600'
+                }`}>
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold">Apenas Assuntos Pendentes</span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                      scope === 'pending' ? 'bg-zinc-800 text-emerald-400' : 'bg-zinc-200 text-zinc-700'
+                    }`}>
+                      {pendingPointsCount} tópicos
+                    </span>
+                  </div>
+                  <p className={`text-[11px] mt-1 leading-relaxed ${
+                    scope === 'pending' ? 'text-zinc-300' : 'text-zinc-500'
+                  }`}>
+                    Distribui apenas os tópicos não estudados. Seus <strong>{completedPointsCount} tópicos concluídos</strong> mantêm suas datas salvas no calendário.
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Todos os Assuntos */}
+              <button
+                type="button"
+                onClick={() => setScope('all')}
+                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                  scope === 'all'
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-xs'
+                    : 'bg-zinc-50 text-zinc-800 border-zinc-200 hover:bg-zinc-100'
+                }`}
+              >
+                <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
+                  scope === 'all' ? 'bg-zinc-800 text-amber-400' : 'bg-white text-zinc-600'
+                }`}>
+                  <RotateCcw className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold">Todos os Assuntos (Reiniciar Edital)</span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                      scope === 'all' ? 'bg-zinc-800 text-amber-400' : 'bg-zinc-200 text-zinc-700'
+                    }`}>
+                      {pendingPointsCount + completedPointsCount} tópicos
+                    </span>
+                  </div>
+                  <p className={`text-[11px] mt-1 leading-relaxed ${
+                    scope === 'all' ? 'text-zinc-300' : 'text-zinc-500'
+                  }`}>
+                    Redistribui todos os tópicos (concluídos e pendentes) das matérias selecionadas a partir da data de início.
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* SECTION C: SPLIT / DIVISÃO DE MATÉRIAS NOTICE & CONTROLS */}
           {dividedPointsCount > 0 && (
             <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-center justify-between flex-wrap gap-2 text-xs">
               <div className="flex items-center gap-2">
@@ -739,7 +899,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                     Defina sua Grade por Dia da Semana
                   </h4>
                   <p className="text-xs text-zinc-500">
-                    Adicione quantas matérias quiser em cada dia. O número de matérias alocadas no dia define a carga de estudo daquele dia.
+                    Adicione matérias em cada dia. O número de matérias alocadas no dia define a carga de estudo.
                   </p>
                 </div>
 
@@ -748,10 +908,10 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                     type="button"
                     onClick={handleAutoDistributeGrade}
                     className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition-colors cursor-pointer flex items-center gap-1.5"
-                    title="Preencher automaticamente com todas as suas matérias cadastradas"
+                    title="Preencher automaticamente com as matérias selecionadas"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-zinc-600" />
-                    <span>Auto-distribuir todas</span>
+                    <span>Auto-distribuir selecionadas</span>
                   </button>
 
                   <button
@@ -775,25 +935,6 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   </button>
                 </div>
               </div>
-
-              {/* Warning if there are subjects with NO slots configured */}
-              {materiasSemSlot.length > 0 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>
-                      <strong>{materiasSemSlot.length} matéria(s) sem dia fixo na grade:</strong> {materiasSemSlot.join(', ')}.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAutoDistributeGrade}
-                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] cursor-pointer"
-                  >
-                    Distribuir na Grade Automaticamente
-                  </button>
-                </div>
-              )}
 
               {/* Presets Quick Carousel */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -879,7 +1020,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                                       onChange={e => handleUpdateSlot(dia.id, slot.id, { materia: e.target.value })}
                                       className="w-full text-xs font-bold bg-transparent border-0 text-zinc-900 focus:outline-hidden cursor-pointer truncate p-0"
                                     >
-                                      {allMaterias.map(m => (
+                                      {selectedMaterias.map(m => (
                                         <option key={m} value={m}>{m}</option>
                                       ))}
                                     </select>
@@ -958,7 +1099,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   Configurações do Ciclo Contínuo
                 </h4>
                 <p className="text-xs text-zinc-500">
-                  Neste modo, as matérias rodam continuamente em fila circular sem amarração rígida a dias da semana.
+                  Neste modo, as matérias selecionadas rodam continuamente em fila circular sem amarração rígida a dias da semana.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
@@ -1027,7 +1168,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-2">
-                  {materiaOrder.map((mat, idx) => {
+                  {materiaOrder.filter(m => selectedMaterias.includes(m)).map((mat, idx) => {
                     const cor = materiasCores[mat] || '#d97706';
                     const count = (pointsByMateria[mat] || []).length;
 
@@ -1061,7 +1202,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                           </button>
                           <button
                             type="button"
-                            disabled={idx === materiaOrder.length - 1}
+                            disabled={idx === selectedMaterias.length - 1}
                             onClick={() => {
                               const next = [...materiaOrder];
                               const temp = next[idx];
@@ -1110,7 +1251,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-zinc-700">Total de tópicos a reorganizar:</span>
                   <span className="font-bold font-mono text-zinc-900">
-                    {pendingPoints.length} tópicos
+                    {targetPointsToSchedule.length} tópicos
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -1124,7 +1265,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <span>
-                  Esta operação mantém rigorosamente a ordem pedagógica dos seus tópicos. Ela apenas pega os itens pendentes e os distribui a partir de hoje nos seus dias de estudo usuais.
+                  Esta operação mantém rigorosamente a ordem pedagógica dos seus tópicos. Ela apenas pega os itens pendentes das matérias selecionadas e os distribui a partir de hoje nos seus dias de estudo usuais.
                 </span>
               </div>
             </div>
@@ -1320,18 +1461,20 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
             </div>
           )}
 
-          {/* Safe Guard Notice Banner */}
-          <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>
-                <strong>Garantia de Histórico:</strong> Seus <strong>{completedPoints.length} tópicos concluídos</strong> terão suas datas passadas 100% preservadas e continuarão intactos no calendário.
+          {/* Status Note: Unselected Disciplines Notice */}
+          {unselectedPointsCount > 0 && (
+            <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>{unselectedPointsCount} tópicos</strong> de matérias desmarcadas ficarão <strong>sem data no calendário</strong> e estarão disponíveis na <strong>aba "Matérias"</strong>.
+                </span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0">
+                Apenas na Aba Matérias
               </span>
             </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
-              Protegido
-            </span>
-          </div>
+          )}
         </div>
 
         {/* Footer Actions */}
