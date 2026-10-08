@@ -40,7 +40,8 @@ import {
   Sliders,
   RefreshCw,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Split
 } from 'lucide-react';
 
 interface ReorganizeModalProps {
@@ -81,6 +82,9 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
 
   // Strategy Mode
   const [strategy, setStrategy] = useState<ReorganizeStrategy>('grade_fixa');
+
+  // Split management toggle: preserve multi-session splits or unify them
+  const [preserveSplitSessions, setPreserveSplitSessions] = useState<boolean>(true);
 
   // Subjects Selection
   const allMaterias = useMemo(() => {
@@ -152,7 +156,6 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         const hasAnySlot = Object.values(prev).some((slots: FixedWeeklySlot[]) => slots.length > 0);
         if (hasAnySlot) return prev;
 
-        // Auto-distribute first subjects into Seg-Sex (2 per day)
         const initial: FixedWeeklySchedule = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 0: [] };
         const subjects = order.length > 0 ? order : ['Direito Constitucional', 'Direito Administrativo'];
         
@@ -181,11 +184,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
           }
         });
 
-        // Sábado com jurisprudência ou revisão
+        // Sábado com jurisprudência
         if (subjects.length > 0) {
           initial[6].push({
             id: `slot_6_1`,
-            materia: subjects[0],
+            materia: subjects[subIdx % subjects.length],
             tipoEstudo: 'jurisprudencia',
             alternancia: 'toda_semana'
           });
@@ -204,6 +207,26 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   const completedPoints = useMemo(() => {
     return pontos.filter(p => isConcluido(p));
   }, [pontos, isConcluido]);
+
+  // Identify topics that have been divided into multiple sessions (Split)
+  const dividedPointsCount = useMemo(() => {
+    return pendingPoints.filter(p => p.datas && p.datas.length > 1).length;
+  }, [pendingPoints]);
+
+  // Identify subjects with topics but NO slot configured on the fixed schedule
+  const materiasConfiguradasNaGrade = useMemo(() => {
+    const set = new Set<string>();
+    Object.values(fixedSchedule).forEach((slots: FixedWeeklySlot[]) => {
+      slots.forEach(s => {
+        if (s.materia) set.add(s.materia);
+      });
+    });
+    return set;
+  }, [fixedSchedule]);
+
+  const materiasSemSlot = useMemo(() => {
+    return selectedMaterias.filter(m => !materiasConfiguradasNaGrade.has(m));
+  }, [selectedMaterias, materiasConfiguradasNaGrade]);
 
   // Points with past dates that are not finished (Atrasados)
   const atrasadosPoints = useMemo(() => {
@@ -270,7 +293,8 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         startDate,
         endDate: startDate,
         diasComEstudo: 0,
-        mediaTopicosPorDia: 0
+        mediaTopicosPorDia: 0,
+        datesByPointId: {}
       };
     }
 
@@ -279,12 +303,12 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         pointsByMateria,
         fixedSchedule,
         startDate,
-        occupiedCountByDate
+        occupiedCountByDate,
+        preserveSplitSessions
       );
     }
 
     if (strategy === 'empurrar_atrasados') {
-      // Collect all pending points ordered by existing data/order
       const sortedPending = [...pendingPoints].sort((a, b) => {
         if (a.data && b.data && a.data !== b.data) return a.data.localeCompare(b.data);
         const oA = typeof a.ordem === 'number' ? a.ordem : 999999;
@@ -307,7 +331,8 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
       studyDays: activeCycleStudyDays,
       materiaOrder: materiaOrder.filter(m => selectedMaterias.includes(m)),
       avoidSameSubjectPerDay,
-      occupiedCountByDate
+      occupiedCountByDate,
+      preserveSplitSessions
     });
   }, [
     strategy,
@@ -320,10 +345,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     topicsPerDay,
     materiaOrder,
     selectedMaterias,
-    avoidSameSubjectPerDay
+    avoidSameSubjectPerDay,
+    preserveSplitSessions
   ]);
 
-  const { orderedPoints, calculatedDates, weeksSummary, endDate, diasComEstudo, mediaTopicosPorDia } = calculationResult;
+  const { orderedPoints, calculatedDates, weeksSummary, endDate, diasComEstudo, mediaTopicosPorDia, datesByPointId } = calculationResult;
 
   // Selected preview week object
   const currentPreviewWeek = useMemo(() => {
@@ -332,11 +358,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
   }, [weeksSummary, selectedPreviewWeek]);
 
   // Handlers for Grade Semanal Fixa
-  const handleAddSlotToDay = (dayOfWeek: number) => {
-    const defaultMateria = materiaOrder[0] || allMaterias[0] || 'Geral';
+  const handleAddSlotToDay = (dayOfWeek: number, subjectName?: string) => {
+    const targetMateria = subjectName || materiaOrder[0] || allMaterias[0] || 'Geral';
     const newSlot: FixedWeeklySlot = {
       id: `slot_${dayOfWeek}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      materia: defaultMateria,
+      materia: targetMateria,
       tipoEstudo: 'qualquer',
       alternancia: 'toda_semana'
     };
@@ -361,6 +387,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     }));
   };
 
+  // Auto-distribute all subjects across available study days
   const handleAutoDistributeGrade = () => {
     const subjects = materiaOrder.filter(m => selectedMaterias.includes(m));
     if (subjects.length === 0) return;
@@ -368,41 +395,54 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     const newSchedule: FixedWeeklySchedule = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 0: [] };
     let subIdx = 0;
 
-    // Distribute 2 subjects per day on Seg-Sex
-    [1, 2, 3, 4, 5].forEach(day => {
-      const mat1 = subjects[subIdx % subjects.length];
-      newSchedule[day].push({
-        id: `auto_${day}_1`,
-        materia: mat1,
-        tipoEstudo: 'doutrina',
-        alternancia: 'toda_semana'
-      });
-      subIdx++;
+    // Se temos mais matérias que dias, usa alternância A/B ou múltiplos slots por dia
+    const daysAvailable = [1, 2, 3, 4, 5];
+    const slotsPerDay = subjects.length > 8 ? 2 : Math.max(1, Math.ceil(subjects.length / daysAvailable.length));
 
-      if (subjects.length > 1) {
-        const mat2 = subjects[subIdx % subjects.length];
+    daysAvailable.forEach(day => {
+      for (let s = 0; s < slotsPerDay && subIdx < subjects.length; s++) {
+        const mat = subjects[subIdx];
         newSchedule[day].push({
-          id: `auto_${day}_2`,
-          materia: mat2,
-          tipoEstudo: 'lei_seca',
+          id: `auto_${day}_${s + 1}`,
+          materia: mat,
+          tipoEstudo: s === 0 ? 'doutrina' : 'lei_seca',
           alternancia: 'toda_semana'
         });
         subIdx++;
       }
     });
 
-    // Sábado com jurisprudência
-    if (subjects.length > 0) {
-      newSchedule[6].push({
-        id: `auto_6_1`,
-        materia: subjects[subIdx % subjects.length],
-        tipoEstudo: 'jurisprudencia',
-        alternancia: 'toda_semana'
+    // Se ainda restam matérias não alocadas, coloca no Sábado ou alterna na Semana B
+    if (subIdx < subjects.length) {
+      // Sábado
+      while (subIdx < subjects.length && (newSchedule[6] || []).length < 2) {
+        newSchedule[6].push({
+          id: `auto_6_${subIdx}`,
+          materia: subjects[subIdx],
+          tipoEstudo: 'jurisprudencia',
+          alternancia: 'toda_semana'
+        });
+        subIdx++;
+      }
+    }
+
+    // Se ainda restam, alterna como Semana B nos dias de semana
+    if (subIdx < subjects.length) {
+      daysAvailable.forEach(day => {
+        if (subIdx < subjects.length) {
+          newSchedule[day].push({
+            id: `auto_${day}_b`,
+            materia: subjects[subIdx],
+            tipoEstudo: 'qualquer',
+            alternancia: 'semana_b'
+          });
+          subIdx++;
+        }
       });
     }
 
     setFixedSchedule(newSchedule);
-    showFeedback('Grade preenchida automaticamente com suas matérias!', 'info');
+    showFeedback('Todas as suas matérias foram distribuídas na grade!', 'info');
   };
 
   const handleClearGrade = () => {
@@ -416,7 +456,6 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     setStrategy(preset.strategy);
 
     if (preset.strategy === 'grade_fixa' && preset.fixedSchedule) {
-      // Map slots to available materias if needed
       const mapped: FixedWeeklySchedule = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 0: [] };
       const subList = materiaOrder.length > 0 ? materiaOrder : allMaterias;
 
@@ -465,25 +504,9 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
     showFeedback(`Preset "${newPreset.nome}" salvo!`, 'success');
   };
 
-  const handleDeletePreset = (id: string) => {
-    const updated = presets.filter(p => p.id !== id);
-    setPresets(updated);
-    saveReorganizePresetsToStorage(updated);
-    if (activePresetId === id && updated.length > 0) {
-      handleSelectPreset(updated[0]);
-    }
-    showFeedback('Preset removido.', 'info');
-  };
-
-  // Execution Handler - 100% SAFE: NEVER WIPES COMPLETED POINTS!
+  // Execution Handler - 100% ROBUST & PROPERLY SYNCS MULTI-SESSION SPLITS!
   const handleExecute = () => {
-    if (calculatedDates.length !== orderedPoints.length || orderedPoints.length === 0) return;
-
-    // Create a lookup of new dates
-    const dateMap = new Map<string, string>();
-    orderedPoints.forEach((p, idx) => {
-      dateMap.set(p.id, calculatedDates[idx]);
-    });
+    if (orderedPoints.length === 0) return;
 
     const finalPointsList: PontoEstudo[] = [];
 
@@ -501,13 +524,27 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         return;
       }
 
-      // REORGANIZED PENDING POINTS: Update date if recalculated
-      if (dateMap.has(p.id)) {
-        finalPointsList.push({
-          ...p,
-          data: dateMap.get(p.id)!,
-          updatedAt: Date.now()
-        });
+      // REORGANIZED PENDING POINTS:
+      if (datesByPointId[p.id] && datesByPointId[p.id].length > 0) {
+        const assignedDates = datesByPointId[p.id];
+        
+        // Se preserva divisão e tinha múltiplas datas calculadas, sincroniza datas e data
+        if (preserveSplitSessions && assignedDates.length > 1) {
+          finalPointsList.push({
+            ...p,
+            data: assignedDates[0],
+            datas: assignedDates,
+            updatedAt: Date.now()
+          });
+        } else {
+          // Unificado ou ponto comum de 1 sessão
+          finalPointsList.push({
+            ...p,
+            data: assignedDates[0],
+            datas: undefined, // Limpa o array antigo de split para não ficar preso no passado!
+            updatedAt: Date.now()
+          });
+        }
       } else {
         // Fallback: keep intact
         finalPointsList.push(p);
@@ -544,7 +581,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                 )}
               </div>
               <p className="text-xs text-zinc-500">
-                Grade semanal com matérias fixas por dia, alternância A/B e respeito ao histórico.
+                Grade semanal com matérias fixas por dia, alternância A/B e sincronização de tópicos divididos.
               </p>
             </div>
           </div>
@@ -645,7 +682,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
         </div>
 
         {/* Body Content */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+        <div className="p-6 overflow-y-auto space-y-4 flex-1">
           {/* Feedback Banner */}
           {feedbackMsg && (
             <div className={`p-3 rounded-xl text-xs font-semibold border flex items-center justify-between animate-in fade-in ${
@@ -661,6 +698,37 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
             </div>
           )}
 
+          {/* SPLIT / DIVISÃO DE MATÉRIAS NOTICE & CONTROLS */}
+          {dividedPointsCount > 0 && (
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex items-center justify-between flex-wrap gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <div className="p-1 bg-indigo-100 text-indigo-700 rounded-md">
+                  <Split className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-indigo-950 block">
+                    {dividedPointsCount} assunto(s) com divisão em múltiplas sessões detectado(s)
+                  </span>
+                  <span className="text-[11px] text-indigo-700">
+                    Você pode manter as sessões separadas nos seus dias de estudo ou unificá-las em uma data única.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 font-semibold text-indigo-900 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={preserveSplitSessions}
+                    onChange={e => setPreserveSplitSessions(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-600 cursor-pointer"
+                  />
+                  <span>Reagendar cada parte em dias separados</span>
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* TAB 1: GRADE SEMANAL FIXA */}
           {activeTab === 'grade_fixa' && (
             <div className="space-y-4">
@@ -671,7 +739,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                     Defina sua Grade por Dia da Semana
                   </h4>
                   <p className="text-xs text-zinc-500">
-                    Adicione quantas matérias quiser em cada dia. O número de matérias alocadas no dia define a carga de estudo.
+                    Adicione quantas matérias quiser em cada dia. O número de matérias alocadas no dia define a carga de estudo daquele dia.
                   </p>
                 </div>
 
@@ -680,10 +748,10 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                     type="button"
                     onClick={handleAutoDistributeGrade}
                     className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition-colors cursor-pointer flex items-center gap-1.5"
-                    title="Preencher automaticamente com suas matérias cadastradas"
+                    title="Preencher automaticamente com todas as suas matérias cadastradas"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-zinc-600" />
-                    <span>Auto-distribuir</span>
+                    <span>Auto-distribuir todas</span>
                   </button>
 
                   <button
@@ -707,6 +775,25 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Warning if there are subjects with NO slots configured */}
+              {materiasSemSlot.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      <strong>{materiasSemSlot.length} matéria(s) sem dia fixo na grade:</strong> {materiasSemSlot.join(', ')}.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAutoDistributeGrade}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] cursor-pointer"
+                  >
+                    Distribuir na Grade Automaticamente
+                  </button>
+                </div>
+              )}
 
               {/* Presets Quick Carousel */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -732,7 +819,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
               </div>
 
               {/* 7 Days Visual Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pt-1">
                 {DIAS_CONFIG.map(dia => {
                   const slots = fixedSchedule[dia.id] || [];
                   const isRestDay = slots.length === 0;
@@ -772,7 +859,7 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                             <span className="text-[11px] font-medium">Dia livre / Sem estudo</span>
                           </div>
                         ) : (
-                          slots.map((slot, sIdx) => {
+                          slots.map(slot => {
                             const cor = materiasCores[slot.materia] || '#d97706';
 
                             return (
@@ -1155,17 +1242,27 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                         </div>
 
                         <div className="space-y-1.5">
-                          {d.topicos.map(t => {
+                          {d.topicos.map((t, tIdx) => {
                             const cor = materiasCores[t.materia] || '#d97706';
+                            const datesForT = datesByPointId[t.id] || [];
+                            const sessionIdx = datesForT.indexOf(d.data);
+
                             return (
-                              <div key={t.id} className="p-2 bg-white border border-zinc-200 rounded-lg text-xs space-y-1 shadow-2xs">
+                              <div key={`${t.id}_${d.data}_${tIdx}`} className="p-2 bg-white border border-zinc-200 rounded-lg text-xs space-y-1 shadow-2xs">
                                 <div className="flex items-center justify-between gap-1">
-                                  <span 
-                                    className="text-[10px] font-bold px-1.5 py-0.2 rounded text-white truncate max-w-[140px]"
-                                    style={{ backgroundColor: cor }}
-                                  >
-                                    {t.materia}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span 
+                                      className="text-[10px] font-bold px-1.5 py-0.2 rounded text-white truncate max-w-[130px]"
+                                      style={{ backgroundColor: cor }}
+                                    >
+                                      {t.materia}
+                                    </span>
+                                    {datesForT.length > 1 && sessionIdx !== -1 && (
+                                      <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1 py-0.2 rounded">
+                                        Parte {sessionIdx + 1}/{datesForT.length}
+                                      </span>
+                                    )}
+                                  </div>
                                   {t.tipoEstudo && (
                                     <span className="text-[9px] uppercase font-bold text-zinc-400">
                                       {t.tipoEstudo === 'lei_seca' ? 'Lei' : t.tipoEstudo === 'jurisprudencia' ? 'Juris' : 'Doutrina'}
@@ -1191,8 +1288,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                   <div className="divide-y divide-zinc-100">
                     {orderedPoints.map((pt, idx) => {
                       const cor = materiasCores[pt.materia] || '#d97706';
+                      const datesForPt = datesByPointId[pt.id] || [];
+                      const sessionIdx = datesForPt.indexOf(calculatedDates[idx]);
+
                       return (
-                        <div key={pt.id} className="py-2 px-1 flex items-center justify-between text-xs gap-2">
+                        <div key={`${pt.id}_${idx}`} className="py-2 px-1 flex items-center justify-between text-xs gap-2">
                           <div className="flex items-center gap-2 truncate flex-1">
                             <span className="font-mono text-[10px] text-zinc-400 w-7">#{idx + 1}</span>
                             <span 
@@ -1201,6 +1301,11 @@ export const ReorganizeModal: React.FC<ReorganizeModalProps> = ({
                             >
                               {pt.materia}
                             </span>
+                            {datesForPt.length > 1 && sessionIdx !== -1 && (
+                              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded shrink-0">
+                                Parte {sessionIdx + 1}/{datesForPt.length}
+                              </span>
+                            )}
                             <span className="text-zinc-800 truncate font-medium">{pt.titulo}</span>
                           </div>
                           <span className="font-mono text-zinc-900 font-bold shrink-0 text-[11px] bg-zinc-100 px-2 py-0.5 rounded">

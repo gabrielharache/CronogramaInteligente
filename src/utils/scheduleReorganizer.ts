@@ -47,13 +47,15 @@ export interface ReorganizeResult {
   endDate: string;
   diasComEstudo: number;
   mediaTopicosPorDia: number;
+  datesByPointId: Record<string, string[]>;
 }
 
 export interface ReorganizeScheduleOptions {
   strategy: ReorganizeStrategy;
   startDate: string; // YYYY-MM-DD
   pointsByMateria: Record<string, PontoEstudo[]>;
-  allTargetPoints?: PontoEstudo[]; // All target points in sequence
+  allTargetPoints?: PontoEstudo[];
+  preserveSplitSessions?: boolean; // Se preserva sessões de tópicos divididos
   
   // Specific to 'grade_fixa':
   fixedSchedule?: FixedWeeklySchedule;
@@ -68,7 +70,6 @@ export interface ReorganizeScheduleOptions {
   pendingAtrasados?: PontoEstudo[];
   futurePending?: PontoEstudo[];
 
-  // Occupied count by other unselected topics or schedules:
   occupiedCountByDate?: Record<string, number>;
 }
 
@@ -125,8 +126,7 @@ export function getDefaultBuiltInPresets(): ReorganizePreset[] {
           { id: 's10', materia: '', tipoEstudo: 'lei_seca', alternancia: 'toda_semana' }
         ],
         6: [
-          { id: 's11', materia: '', tipoEstudo: 'jurisprudencia', alternancia: 'toda_semana' },
-          { id: 's12', materia: '', tipoEstudo: 'jurisprudencia', alternancia: 'toda_semana' }
+          { id: 's11', materia: '', tipoEstudo: 'jurisprudencia', alternancia: 'toda_semana' }
         ],
         0: []
       },
@@ -237,38 +237,64 @@ function formatDateISO(d: Date): string {
 }
 
 /**
- * Cria cópia das filas de tópicos por matéria preservando a ordem pedagógica
+ * Cria cópia das filas de tópicos por matéria.
+ * Se preserveSplitSessions for true, replica pontos divididos conforme número de sessões em datas.
  */
-function cloneTopicQueues(pointsByMateria: Record<string, PontoEstudo[]>): Record<string, PontoEstudo[]> {
+function cloneTopicQueues(
+  pointsByMateria: Record<string, PontoEstudo[]>,
+  preserveSplitSessions: boolean = true
+): Record<string, PontoEstudo[]> {
   const queues: Record<string, PontoEstudo[]> = {};
   Object.keys(pointsByMateria).forEach(mat => {
-    queues[mat] = [...(pointsByMateria[mat] || [])];
+    queues[mat] = [];
+    (pointsByMateria[mat] || []).forEach(p => {
+      const sessionCount = preserveSplitSessions && p.datas && p.datas.length > 1 ? p.datas.length : 1;
+      for (let s = 0; s < sessionCount; s++) {
+        queues[mat].push(p);
+      }
+    });
   });
   return queues;
 }
 
 /**
  * Extrai da fila da matéria um tópico preferencialmente pelo tipo de estudo.
- * Se não encontrar o tipo solicitado, faz fallback para o próximo tópico da matéria.
+ * Se o mesmo ponto ID já foi alocado no mesmo dia (ex: ponto dividido em 2 sessões),
+ * NÃO aloca a segunda sessão no mesmo dia (adia para o próximo dia da matéria).
  */
 function pullTopicFromMateria(
   queue: PontoEstudo[],
-  preferredTipo?: TipoEstudo | 'qualquer'
+  preferredTipo?: TipoEstudo | 'qualquer',
+  scheduledTodayPointIds?: Set<string>
 ): PontoEstudo | null {
   if (!queue || queue.length === 0) return null;
 
+  const isEligibleToday = (p: PontoEstudo) => {
+    if (!scheduledTodayPointIds) return true;
+    return !scheduledTodayPointIds.has(p.id);
+  };
+
   if (!preferredTipo || preferredTipo === 'qualquer') {
-    return queue.shift() || null;
+    const idx = queue.findIndex(isEligibleToday);
+    if (idx !== -1) {
+      return queue.splice(idx, 1)[0];
+    }
+    return null;
   }
 
-  // Tenta achar pelo tipo solicitado
-  const idx = queue.findIndex(p => p.tipoEstudo === preferredTipo);
+  // Tenta achar pelo tipo solicitado que não tenha sido usado hoje
+  const idx = queue.findIndex(p => p.tipoEstudo === preferredTipo && isEligibleToday(p));
   if (idx !== -1) {
     return queue.splice(idx, 1)[0];
   }
 
-  // Fallback: consome o primeiro tópico disponível para não deixar o horário ocioso
-  return queue.shift() || null;
+  // Fallback: primeiro disponível da matéria não usado hoje
+  const fallbackIdx = queue.findIndex(isEligibleToday);
+  if (fallbackIdx !== -1) {
+    return queue.splice(fallbackIdx, 1)[0];
+  }
+
+  return null;
 }
 
 /**
@@ -280,9 +306,10 @@ export function calculateScheduleFixedWeekly(
   pointsByMateria: Record<string, PontoEstudo[]>,
   fixedSchedule: FixedWeeklySchedule,
   startDate: string,
-  occupiedCountByDate: Record<string, number> = {}
+  occupiedCountByDate: Record<string, number> = {},
+  preserveSplitSessions: boolean = true
 ): ReorganizeResult {
-  const queues = cloneTopicQueues(pointsByMateria);
+  const queues = cloneTopicQueues(pointsByMateria, preserveSplitSessions);
   const totalPoints = Object.values(queues).reduce((sum, q) => sum + q.length, 0);
 
   if (totalPoints === 0 || !startDate) {
@@ -294,7 +321,8 @@ export function calculateScheduleFixedWeekly(
       startDate,
       endDate: startDate,
       diasComEstudo: 0,
-      mediaTopicosPorDia: 0
+      mediaTopicosPorDia: 0,
+      datesByPointId: {}
     };
   }
 
@@ -341,39 +369,52 @@ export function calculateScheduleFixedWeekly(
       return true;
     });
 
+    const scheduledTodayPointIds = new Set<string>();
+
     if (activeSlots.length > 0) {
       for (const slot of activeSlots) {
         if (!slot.materia) continue;
 
-        const queue = queues[slot.materia];
+        let queue = queues[slot.materia];
+        
+        // Se a matéria do slot já terminou 100%, mas outras matérias da grade ainda têm tópicos,
+        // aloca a próxima matéria disponível para não deixar o dia ocioso
+        if ((!queue || queue.length === 0) && remainingCount > 0) {
+          const alternateMat = Object.keys(queues).find(m => (queues[m] || []).length > 0);
+          if (alternateMat) {
+            queue = queues[alternateMat];
+          }
+        }
+
         if (queue && queue.length > 0) {
-          const topic = pullTopicFromMateria(queue, slot.tipoEstudo);
+          const topic = pullTopicFromMateria(queue, slot.tipoEstudo, scheduledTodayPointIds);
           if (topic) {
             scheduledTopics.push({
               ponto: topic,
               data: dateStr
             });
+            scheduledTodayPointIds.add(topic.id);
             remainingCount--;
           }
         }
       }
     }
 
-    // Se todas as matérias cadastradas na grade já tiverem terminado, mas existirem
-    // matérias sem slot na grade, alocamos os tópicos restantes para não perder nenhum dado
-    const materiasComSlotsRestantes = Array.from(materiasConfiguradasNaGrade).some(
-      m => (queues[m] || []).length > 0
+    // Se houver matérias selecionadas que NÃO estavam cadastradas na grade fixa,
+    // e o dia atual tem slots de estudo mas sobraram vagas, distribui os tópicos restantes
+    const materiasRestantesSemSlot = Object.keys(queues).filter(
+      m => (queues[m] || []).length > 0 && !materiasConfiguradasNaGrade.has(m)
     );
 
-    if (!materiasComSlotsRestantes && remainingCount > 0) {
-      // Aloca as matérias restantes não configuradas de forma rotativa nos dias com estudo
-      const materiasRestantes = Object.keys(queues).filter(m => (queues[m] || []).length > 0);
-      if (materiasRestantes.length > 0 && slotsDoDia.length > 0) {
-        for (let i = 0; i < slotsDoDia.length && remainingCount > 0; i++) {
-          const mat = materiasRestantes[i % materiasRestantes.length];
-          const topic = queues[mat]?.shift();
+    if (materiasRestantesSemSlot.length > 0 && slotsDoDia.length > 0 && remainingCount > 0) {
+      for (const mat of materiasRestantesSemSlot) {
+        if (remainingCount <= 0) break;
+        const queue = queues[mat];
+        if (queue && queue.length > 0) {
+          const topic = pullTopicFromMateria(queue, 'qualquer', scheduledTodayPointIds);
           if (topic) {
             scheduledTopics.push({ ponto: topic, data: dateStr });
+            scheduledTodayPointIds.add(topic.id);
             remainingCount--;
           }
         }
@@ -384,7 +425,7 @@ export function calculateScheduleFixedWeekly(
     currentDate.setDate(currentDate.getDate() + 1);
   }
 
-  // Fallback de emergência (caso a grade não tivesse nenhum dia configurado):
+  // Fallback de emergência absoluto (caso a grade estivesse vazia):
   if (remainingCount > 0) {
     Object.keys(queues).forEach(mat => {
       const leftovers = queues[mat] || [];
@@ -396,6 +437,15 @@ export function calculateScheduleFixedWeekly(
       }
     });
   }
+
+  // Agrupa as datas calculadas por ponto ID (para preservar e atualizar pontos divididos)
+  const datesByPointId: Record<string, string[]> = {};
+  scheduledTopics.forEach(item => {
+    if (!datesByPointId[item.ponto.id]) {
+      datesByPointId[item.ponto.id] = [];
+    }
+    datesByPointId[item.ponto.id].push(item.data);
+  });
 
   const finalPoints = scheduledTopics.map(item => ({
     ...item.ponto,
@@ -414,7 +464,8 @@ export function calculateScheduleFixedWeekly(
     startDate,
     endDate: dates[dates.length - 1] || startDate,
     diasComEstudo: uniqueDatesCount,
-    mediaTopicosPorDia: uniqueDatesCount > 0 ? Number((finalPoints.length / uniqueDatesCount).toFixed(1)) : 0
+    mediaTopicosPorDia: uniqueDatesCount > 0 ? Number((finalPoints.length / uniqueDatesCount).toFixed(1)) : 0,
+    datesByPointId
   };
 }
 
@@ -431,6 +482,7 @@ export function calculateScheduleCycle(
     materiaOrder: string[];
     avoidSameSubjectPerDay?: boolean;
     occupiedCountByDate?: Record<string, number>;
+    preserveSplitSessions?: boolean;
   }
 ): ReorganizeResult {
   const {
@@ -439,10 +491,11 @@ export function calculateScheduleCycle(
     studyDays = [1, 2, 3, 4, 5, 6],
     materiaOrder,
     avoidSameSubjectPerDay = true,
-    occupiedCountByDate = {}
+    occupiedCountByDate = {},
+    preserveSplitSessions = true
   } = options;
 
-  const queues = cloneTopicQueues(pointsByMateria);
+  const queues = cloneTopicQueues(pointsByMateria, preserveSplitSessions);
   const totalPoints = Object.values(queues).reduce((sum, q) => sum + q.length, 0);
 
   if (totalPoints === 0 || !startDate) {
@@ -454,7 +507,8 @@ export function calculateScheduleCycle(
       startDate,
       endDate: startDate,
       diasComEstudo: 0,
-      mediaTopicosPorDia: 0
+      mediaTopicosPorDia: 0,
+      datesByPointId: {}
     };
   }
 
@@ -464,7 +518,6 @@ export function calculateScheduleCycle(
   const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
   let currentDate = new Date(startYear, startMonth - 1, startDay, 12, 0, 0);
 
-  // Ponteiro contínuo do ciclo circular de matérias
   let cycleSubjectIndex = 0;
   let safetyCounter = 0;
   const maxDays = 2500;
@@ -480,9 +533,9 @@ export function calculateScheduleCycle(
 
     if (isStudyDay && slotsAvailableToday > 0) {
       const scheduledTodaySubjects = new Set<string>();
+      const scheduledTodayPointIds = new Set<string>();
       let slotsFilledToday = 0;
 
-      // Percorre as matérias para preencher a meta de hoje
       let subjectPassCount = 0;
       const orderLength = materiaOrder.length;
 
@@ -493,24 +546,34 @@ export function calculateScheduleCycle(
 
         const canScheduleSubject = !avoidSameSubjectPerDay || 
           !scheduledTodaySubjects.has(targetMateria) || 
-          // Se todas as matérias restantes já foram usadas hoje, permite repetir
           materiaOrder.filter(m => (queues[m] || []).length > 0).every(m => scheduledTodaySubjects.has(m));
 
         if (queue && queue.length > 0 && canScheduleSubject) {
-          const topic = queue.shift()!;
-          scheduledTopics.push({ ponto: topic, data: dateStr });
-          scheduledTodaySubjects.add(targetMateria);
-          slotsFilledToday++;
-          remainingCount--;
+          // Garante que o mesmo ponto ID (caso dividido) não caia no mesmo dia
+          const topic = pullTopicFromMateria(queue, 'qualquer', scheduledTodayPointIds);
+          if (topic) {
+            scheduledTopics.push({ ponto: topic, data: dateStr });
+            scheduledTodaySubjects.add(targetMateria);
+            scheduledTodayPointIds.add(topic.id);
+            slotsFilledToday++;
+            remainingCount--;
+          }
         }
 
-        // Avança o ponteiro circular do ciclo para a próxima matéria
         cycleSubjectIndex = (cycleSubjectIndex + 1) % orderLength;
       }
     }
 
     currentDate.setDate(currentDate.getDate() + 1);
   }
+
+  const datesByPointId: Record<string, string[]> = {};
+  scheduledTopics.forEach(item => {
+    if (!datesByPointId[item.ponto.id]) {
+      datesByPointId[item.ponto.id] = [];
+    }
+    datesByPointId[item.ponto.id].push(item.data);
+  });
 
   const finalPoints = scheduledTopics.map(item => ({
     ...item.ponto,
@@ -529,7 +592,8 @@ export function calculateScheduleCycle(
     startDate,
     endDate: dates[dates.length - 1] || startDate,
     diasComEstudo: uniqueDatesCount,
-    mediaTopicosPorDia: uniqueDatesCount > 0 ? Number((finalPoints.length / uniqueDatesCount).toFixed(1)) : 0
+    mediaTopicosPorDia: uniqueDatesCount > 0 ? Number((finalPoints.length / uniqueDatesCount).toFixed(1)) : 0,
+    datesByPointId
   };
 }
 
@@ -563,7 +627,8 @@ export function calculateSchedulePushAtrasados(
       startDate,
       endDate: startDate,
       diasComEstudo: 0,
-      mediaTopicosPorDia: 0
+      mediaTopicosPorDia: 0,
+      datesByPointId: {}
     };
   }
 
@@ -572,34 +637,45 @@ export function calculateSchedulePushAtrasados(
 
   const updatedPoints: PontoEstudo[] = [];
   const calculatedDates: string[] = [];
+  const datesByPointId: Record<string, string[]> = {};
 
   let currentDaySlotsFilled = 0;
 
   for (let i = 0; i < allPendingPoints.length; i++) {
-    // Procura o próximo dia de estudo com vaga
-    while (true) {
-      const dStr = formatDateISO(currentDate);
-      const isStudyDay = studyDays.includes(currentDate.getDay());
-      const occupied = occupiedCountByDate[dStr] || 0;
+    const pt = allPendingPoints[i];
+    const sessionCount = pt.datas && pt.datas.length > 1 ? pt.datas.length : 1;
+    const assignedForPt: string[] = [];
 
-      if (isStudyDay && currentDaySlotsFilled + occupied < topicsPerDay) {
-        break;
+    for (let s = 0; s < sessionCount; s++) {
+      while (true) {
+        const dStr = formatDateISO(currentDate);
+        const isStudyDay = studyDays.includes(currentDate.getDay());
+        const occupied = occupiedCountByDate[dStr] || 0;
+
+        // Se já agendamos uma sessão deste mesmo ponto hoje, avança o dia
+        const alreadyScheduledPtToday = assignedForPt.includes(dStr);
+
+        if (isStudyDay && !alreadyScheduledPtToday && currentDaySlotsFilled + occupied < topicsPerDay) {
+          break;
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+        currentDaySlotsFilled = 0;
       }
 
-      currentDate.setDate(currentDate.getDate() + 1);
-      currentDaySlotsFilled = 0;
+      const assignedDate = formatDateISO(currentDate);
+      assignedForPt.push(assignedDate);
+      calculatedDates.push(assignedDate);
+      currentDaySlotsFilled++;
     }
 
-    const assignedDate = formatDateISO(currentDate);
-    const pt = allPendingPoints[i];
-
+    datesByPointId[pt.id] = assignedForPt;
     updatedPoints.push({
       ...pt,
-      data: assignedDate,
+      data: assignedForPt[0],
+      datas: assignedForPt.length > 1 ? assignedForPt : undefined,
       updatedAt: Date.now()
     });
-    calculatedDates.push(assignedDate);
-    currentDaySlotsFilled++;
   }
 
   const weeksSummary = buildWeeksSummaryFromPoints(updatedPoints);
@@ -613,7 +689,8 @@ export function calculateSchedulePushAtrasados(
     startDate,
     endDate: calculatedDates[calculatedDates.length - 1] || startDate,
     diasComEstudo: uniqueDatesCount,
-    mediaTopicosPorDia: uniqueDatesCount > 0 ? Number((updatedPoints.length / uniqueDatesCount).toFixed(1)) : 0
+    mediaTopicosPorDia: uniqueDatesCount > 0 ? Number((updatedPoints.length / uniqueDatesCount).toFixed(1)) : 0,
+    datesByPointId
   };
 }
 
@@ -703,12 +780,15 @@ export function calculateSmartSchedule(
   pointsByMateria: Record<string, PontoEstudo[]>,
   options: any
 ): ReorganizeResult {
+  const preserveSplit = options.preserveSplitSessions !== false;
+
   if (options.strategy === 'grade_fixa' && options.fixedSchedule) {
     return calculateScheduleFixedWeekly(
       pointsByMateria,
       options.fixedSchedule,
       options.startDate,
-      options.occupiedCountByDate
+      options.occupiedCountByDate,
+      preserveSplit
     );
   }
 
@@ -731,6 +811,7 @@ export function calculateSmartSchedule(
     studyDays: options.studyDays || [1, 2, 3, 4, 5, 6],
     materiaOrder: options.materiaOrder || Object.keys(pointsByMateria),
     avoidSameSubjectPerDay: options.avoidSameSubjectPerDay !== false,
-    occupiedCountByDate: options.occupiedCountByDate
+    occupiedCountByDate: options.occupiedCountByDate,
+    preserveSplitSessions: preserveSplit
   });
 }
