@@ -1220,18 +1220,15 @@ function CronogramaDashboard({ userId }: CronogramaDashboardProps) {
           ? prev.pontos 
           : prev.pontos.filter(p => p.cronogramaId === activeId);
 
-        // Update existing points, ensuring NONE are ever lost
+        // Update existing points, ensuring NONE are ever lost and completed points keep their dates
         const updatedActivePoints = currentActivePoints.map(p => {
           if (reorgMap.has(p.id)) {
             return reorgMap.get(p.id)!;
           }
-          // If point was omitted from reorgData (e.g. was already completed), keep it!
-          // Clear its calendar date if it's completed so it is taken off the calendar,
-          // but preserve the topic in state so it remains available in the materias tab.
-          const isDone = Boolean(p.lido || (p.qFeitas && Number(p.qTotal) > 0));
+          // If point was omitted from reorgData (e.g. was already completed), keep it with its original date!
           return {
             ...p,
-            data: isDone ? '' : p.data,
+            data: p.data,
             updatedAt: Date.now()
           };
         });
